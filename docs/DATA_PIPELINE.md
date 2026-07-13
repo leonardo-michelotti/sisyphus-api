@@ -39,6 +39,18 @@ As tabelas de frases e pensadores são exportadas como Parquet comprimido dentro
 mesmo diretório da execução. Uma página válida sem frases produz um Parquet vazio,
 sem interromper o restante do pipeline.
 
+## Resiliência proporcional ao produto
+
+A ingestão mantém no máximo quatro pensadores em processamento simultâneo. Cada
+requisição pode ser repetida até três vezes quando ocorre timeout, falha de rede ou
+resposta HTTP transitória (`408`, `429`, `5xx` selecionados). Erros permanentes,
+como `404`, não são repetidos. O intervalo usa backoff curto com jitter e respeita
+`Retry-After` numérico, limitado a 30 segundos.
+
+Não há fila, worker distribuído ou serviço de cache. Se uma fonte continuar
+indisponível, o manifesto identifica o pensador e o tipo da falha, o warehouse não
+é atualizado e o último SQLite válido permanece intacto.
+
 ## Silver: identidade e normalização
 
 `stg_quotes` normaliza espaços e calcula o tamanho. `quote_id` identifica o conteúdo
@@ -76,6 +88,10 @@ operação atômica. Uma falha mantém intacto o último artefato válido.
 Esse SQLite ainda não alimenta a FastAPI publicada. A API continua consultando as
 fontes ao vivo; integrar o artefato curado à camada HTTP é o próximo marco do
 produto, não uma capacidade já entregue.
+
+Antes da troca do arquivo, a publicação também exige todos os pensadores do
+catálogo e ao menos uma frase elegível. Esses gates cobrem as falhas destrutivas
+para o MVP sem presumir volume ou infraestrutura que o produto ainda não possui.
 
 ## Execução
 

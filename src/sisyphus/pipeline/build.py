@@ -8,6 +8,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,9 @@ WAREHOUSE = DATA / "sisyphus.duckdb"
 SERVING = DATA / "sisyphus.db"
 REPORT = ROOT / "reports" / "data-quality.html"
 PARSER_VERSION = "1"
+MAX_FETCH_ATTEMPTS = 3
+MAX_CONCURRENT_FETCHES = 4
+TRANSIENT_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 
 
 @dataclass(frozen=True)
@@ -40,8 +44,43 @@ class Snapshot:
     wikidata: dict[str, Any]
 
 
+def _retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
+    if response is not None and (retry_after := response.headers.get("Retry-After")):
+        try:
+            return min(float(retry_after), 30.0)
+        except ValueError:
+            pass
+    jitter = int.from_bytes(os.urandom(2), "big") / 655_350
+    return 0.25 * (1 << attempt) + jitter
+
+
+async def _get_with_retry(
+    client: httpx.AsyncClient, url: str, *, params: dict[str, Any]
+) -> httpx.Response:
+    last_error: httpx.HTTPError | None = None
+    for attempt in range(MAX_FETCH_ATTEMPTS):
+        response: httpx.Response | None = None
+        try:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in TRANSIENT_STATUS_CODES:
+                raise
+            response = exc.response
+            last_error = exc
+        except (httpx.NetworkError, httpx.TimeoutException) as exc:
+            last_error = exc
+        if attempt == MAX_FETCH_ATTEMPTS - 1:
+            assert last_error is not None
+            raise last_error
+        await asyncio.sleep(_retry_delay(attempt, response))
+    raise AssertionError("tentativas HTTP encerradas sem resultado")
+
+
 async def _fetch_one(client: httpx.AsyncClient, name: str) -> Snapshot:
-    resolved = await client.get(
+    resolved = await _get_with_retry(
+        client,
         settings.wikiquote_api,
         params={
             "action": "query",
@@ -52,37 +91,34 @@ async def _fetch_one(client: httpx.AsyncClient, name: str) -> Snapshot:
             "formatversion": 2,
         },
     )
-    resolved.raise_for_status()
     page = resolved.json()["query"]["pages"][0]
     qid = page.get("pageprops", {}).get("wikibase_item")
     if not qid:
         raise RuntimeError(f"{name}: página sem QID")
     title = page["title"]
-    wikiquote_response, wikidata_response = await asyncio.gather(
-        client.get(
-            settings.wikiquote_api,
-            params={
-                "action": "parse",
-                "page": title,
-                "prop": "text|revid",
-                "format": "json",
-                "formatversion": 2,
-            },
-        ),
-        client.get(
-            settings.wikidata_api,
-            params={
-                "action": "wbgetentities",
-                "ids": qid,
-                "props": "labels|descriptions|claims",
-                "languages": "pt|en",
-                "format": "json",
-                "formatversion": 2,
-            },
-        ),
+    wikiquote_response = await _get_with_retry(
+        client,
+        settings.wikiquote_api,
+        params={
+            "action": "parse",
+            "page": title,
+            "prop": "text|revid",
+            "format": "json",
+            "formatversion": 2,
+        },
     )
-    wikiquote_response.raise_for_status()
-    wikidata_response.raise_for_status()
+    wikidata_response = await _get_with_retry(
+        client,
+        settings.wikidata_api,
+        params={
+            "action": "wbgetentities",
+            "ids": qid,
+            "props": "labels|descriptions|claims",
+            "languages": "pt|en",
+            "format": "json",
+            "formatversion": 2,
+        },
+    )
     wikiquote = wikiquote_response.json()
     parsed = wikiquote.get("parse") if isinstance(wikiquote, dict) else None
     revision = parsed.get("revid") if isinstance(parsed, dict) else None
@@ -152,18 +188,46 @@ def _write_manifest(
 
 
 async def ingest(
-    *, bronze_root: Path = BRONZE, warehouse: Path = WAREHOUSE, run_id: str | None = None
+    *,
+    bronze_root: Path = BRONZE,
+    warehouse: Path = WAREHOUSE,
+    run_id: str | None = None,
+    concurrency: int = MAX_CONCURRENT_FETCHES,
 ) -> list[Snapshot]:
     """Baixa um snapshot identificável das fontes e atualiza as tabelas bronze."""
     run_id = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    if concurrency < 1:
+        raise ValueError("concurrency deve ser maior que zero")
     run_dir = bronze_root / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     headers = {"User-Agent": settings.user_agent}
     sources: list[dict[str, Any]] = []
     try:
         async with httpx.AsyncClient(headers=headers, timeout=settings.http_timeout) as client:
-            snapshots = await asyncio.gather(*(_fetch_one(client, name) for name in ALL_THINKERS))
-        sources = [_source_record(item, run_dir) for item in snapshots]
+            semaphore = asyncio.Semaphore(concurrency)
+
+            async def fetch_limited(name: str) -> Snapshot:
+                async with semaphore:
+                    return await _fetch_one(client, name)
+
+            results = await asyncio.gather(
+                *(fetch_limited(name) for name in ALL_THINKERS), return_exceptions=True
+            )
+        snapshots: list[Snapshot] = []
+        for name, result in zip(ALL_THINKERS, results, strict=True):
+            if isinstance(result, BaseException):
+                sources.append(
+                    {
+                        "requested_name": name,
+                        "status": "failed",
+                        "error": type(result).__name__,
+                    }
+                )
+            else:
+                snapshots.append(result)
+                sources.append(_source_record(result, run_dir))
+        if len(snapshots) != len(ALL_THINKERS):
+            raise RuntimeError("uma ou mais fontes falharam; o warehouse não foi atualizado")
         _load_bronze(snapshots, warehouse=warehouse, bronze_dir=run_dir)
     except Exception as exc:
         _write_manifest(
@@ -253,7 +317,12 @@ def transform(*, warehouse: Path = WAREHOUSE) -> None:
     )
 
 
-def publish(*, warehouse: Path = WAREHOUSE, serving: Path = SERVING) -> None:
+def publish(
+    *,
+    warehouse: Path = WAREHOUSE,
+    serving: Path = SERVING,
+    expected_thinkers: Collection[str] = ALL_THINKERS,
+) -> None:
     """Gera e valida um SQLite novo antes de substituir o artefato publicado."""
     serving.parent.mkdir(parents=True, exist_ok=True)
     candidate = serving.with_name(f".{serving.name}.next")
@@ -263,6 +332,19 @@ def publish(*, warehouse: Path = WAREHOUSE, serving: Path = SERVING) -> None:
         try:
             out.execute("pragma foreign_keys = on")
             with duckdb.connect(str(warehouse), read_only=True) as source:
+                available_thinkers = {
+                    row[0]
+                    for row in source.execute("select thinker_name from dim_thinkers").fetchall()
+                }
+                missing_thinkers = set(expected_thinkers) - available_thinkers
+                if missing_thinkers:
+                    names = ", ".join(sorted(missing_thinkers))
+                    raise RuntimeError(f"publicação bloqueada: pensadores ausentes: {names}")
+                eligible = source.execute(
+                    "select count(*) from fct_quotes where is_daily_eligible"
+                ).fetchone()
+                if eligible is None or eligible[0] < 1:
+                    raise RuntimeError("publicação bloqueada: nenhuma frase elegível")
                 out.executescript(
                     """create table thinkers (
                         thinker_qid text primary key,
