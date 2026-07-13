@@ -11,9 +11,15 @@ models:
   - name: stg_quotes
     description: Frases normalizadas, ainda sem decisão editorial.
     columns:
-      - name: quote_id
+      - name: occurrence_id
         tests: [not_null, unique]
+      - name: quote_id
+        tests: [not_null]
       - name: thinker_qid
+        tests: [not_null]
+      - name: source_name
+        tests: [not_null]
+      - name: source_license
         tests: [not_null]
       - name: category
         tests:
@@ -27,8 +33,16 @@ models:
   - name: fct_quotes
     description: Catálogo editorial com decisão e motivo de qualidade explícitos.
     columns:
-      - name: quote_id
+      - name: occurrence_id
         tests: [not_null, unique]
+      - name: quote_id
+        tests: [not_null]
+      - name: source_name
+        tests: [not_null]
+      - name: source_license
+        tests: [not_null]
+      - name: quality_reasons
+        tests: [not_null]
       - name: thinker_qid
         tests:
           - relationships:

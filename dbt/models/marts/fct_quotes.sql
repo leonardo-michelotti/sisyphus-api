@@ -6,6 +6,17 @@ with assessed as (
         character_count < 40 as very_short,
         character_count > 500 as very_long
     from {{ ref('stg_quotes') }}
+),
+classified as (
+    select
+        *,
+        list_filter([
+            case when citation_only then 'citation_only' end,
+            case when very_short then 'short_text' end,
+            case when very_long then 'long_text' end,
+            case when attributed then 'attributed_quote' end
+        ], reason -> reason is not null) as quality_reasons
+    from assessed
 )
 select
     *,
@@ -15,14 +26,11 @@ select
         else 'accepted'
     end as curation_status,
     case
-        when citation_only then 'citation_only'
-        when very_short then 'short_text'
-        when very_long then 'long_text'
-        when attributed then 'attributed_quote'
-        else 'passed_automatic_rules'
+        when len(quality_reasons) = 0 then 'passed_automatic_rules'
+        else quality_reasons[1]
     end as quality_reason,
     not citation_only
         and not very_short
         and not very_long
         and not attributed as is_daily_eligible
-from assessed
+from classified

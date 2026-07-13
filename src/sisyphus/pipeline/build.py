@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
 import json
 import os
@@ -25,6 +26,7 @@ BRONZE = DATA / "bronze"
 WAREHOUSE = DATA / "sisyphus.duckdb"
 SERVING = DATA / "sisyphus.db"
 REPORT = ROOT / "reports" / "data-quality.html"
+PARSER_VERSION = "1"
 
 
 @dataclass(frozen=True)
@@ -44,7 +46,7 @@ async def _fetch_one(client: httpx.AsyncClient, name: str) -> Snapshot:
         params={
             "action": "query",
             "titles": name,
-            "prop": "pageprops|info",
+            "prop": "pageprops",
             "redirects": 1,
             "format": "json",
             "formatversion": 2,
@@ -56,8 +58,6 @@ async def _fetch_one(client: httpx.AsyncClient, name: str) -> Snapshot:
     if not qid:
         raise RuntimeError(f"{name}: página sem QID")
     title = page["title"]
-    revision = int(page["lastrevid"])
-
     wikiquote_response, wikidata_response = await asyncio.gather(
         client.get(
             settings.wikiquote_api,
@@ -83,40 +83,94 @@ async def _fetch_one(client: httpx.AsyncClient, name: str) -> Snapshot:
     )
     wikiquote_response.raise_for_status()
     wikidata_response.raise_for_status()
+    wikiquote = wikiquote_response.json()
+    parsed = wikiquote.get("parse") if isinstance(wikiquote, dict) else None
+    revision = parsed.get("revid") if isinstance(parsed, dict) else None
+    if not isinstance(revision, int):
+        raise RuntimeError(f"{name}: resposta sem revisão do conteúdo interpretado")
     return Snapshot(
         name=name,
         title=title,
         qid=qid,
         revision=revision,
         fetched_at=datetime.now(timezone.utc).isoformat(),
-        wikiquote=wikiquote_response.json(),
+        wikiquote=wikiquote,
         wikidata=wikidata_response.json(),
     )
 
 
-async def ingest() -> list[Snapshot]:
+def _json_bytes(payload: dict[str, Any]) -> bytes:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+
+
+def _source_record(item: Snapshot, run_dir: Path) -> dict[str, Any]:
+    wikiquote_bytes = _json_bytes(item.wikiquote)
+    wikidata_bytes = _json_bytes(item.wikidata)
+    wikiquote_hash = hashlib.sha256(wikiquote_bytes).hexdigest()
+    wikidata_hash = hashlib.sha256(wikidata_bytes).hexdigest()
+    wikiquote_path = run_dir / "wikiquote" / f"{item.qid}-{item.revision}-{wikiquote_hash}.json"
+    wikidata_path = run_dir / "wikidata" / f"{item.qid}-{wikidata_hash}.json"
+    wikiquote_path.parent.mkdir(parents=True, exist_ok=True)
+    wikidata_path.parent.mkdir(parents=True, exist_ok=True)
+    wikiquote_path.write_bytes(wikiquote_bytes)
+    wikidata_path.write_bytes(wikidata_bytes)
+    return {
+        "requested_name": item.name,
+        "wikiquote_title": item.title,
+        "qid": item.qid,
+        "wikiquote_revision": item.revision,
+        "wikiquote_file": wikiquote_path.relative_to(run_dir).as_posix(),
+        "wikiquote_sha256": wikiquote_hash,
+        "wikidata_file": wikidata_path.relative_to(run_dir).as_posix(),
+        "wikidata_sha256": wikidata_hash,
+        "fetched_at": item.fetched_at,
+        "status": "success",
+    }
+
+
+def _write_manifest(
+    run_dir: Path,
+    *,
+    run_id: str,
+    status: str,
+    sources: list[dict[str, Any]],
+    error: str | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "run_id": run_id,
+        "status": status,
+        "parser_version": PARSER_VERSION,
+        "sources": sources,
+    }
+    if error:
+        payload["error"] = error
+    (run_dir / "manifest.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
+    )
+
+
+async def ingest(
+    *, bronze_root: Path = BRONZE, warehouse: Path = WAREHOUSE, run_id: str | None = None
+) -> list[Snapshot]:
     """Baixa um snapshot identificável das fontes e atualiza as tabelas bronze."""
-    BRONZE.mkdir(parents=True, exist_ok=True)
+    run_id = run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    run_dir = bronze_root / run_id
+    run_dir.mkdir(parents=True, exist_ok=False)
     headers = {"User-Agent": settings.user_agent}
-    async with httpx.AsyncClient(headers=headers, timeout=settings.http_timeout) as client:
-        snapshots = await asyncio.gather(*(_fetch_one(client, name) for name in ALL_THINKERS))
-
-    for item in snapshots:
-        path = BRONZE / f"{item.qid}-{item.revision}.json"
-        payload = {
-            "metadata": {
-                "requested_name": item.name,
-                "wikiquote_title": item.title,
-                "qid": item.qid,
-                "source_revision": item.revision,
-                "fetched_at": item.fetched_at,
-            },
-            "wikiquote": item.wikiquote,
-            "wikidata": item.wikidata,
-        }
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-    _load_bronze(snapshots)
+    sources: list[dict[str, Any]] = []
+    try:
+        async with httpx.AsyncClient(headers=headers, timeout=settings.http_timeout) as client:
+            snapshots = await asyncio.gather(*(_fetch_one(client, name) for name in ALL_THINKERS))
+        sources = [_source_record(item, run_dir) for item in snapshots]
+        _load_bronze(snapshots, warehouse=warehouse, bronze_dir=run_dir)
+    except Exception as exc:
+        _write_manifest(
+            run_dir, run_id=run_id, status="failed", sources=sources, error=type(exc).__name__
+        )
+        raise
+    _write_manifest(run_dir, run_id=run_id, status="complete", sources=sources)
     return list(snapshots)
 
 
@@ -134,7 +188,8 @@ def _load_bronze(
         con.execute(
             """create table bronze_quotes (
                 thinker_qid varchar, thinker_name varchar, text varchar, category varchar,
-                work varchar, source_url varchar, source_revision bigint, fetched_at timestamptz
+                work varchar, source_url varchar, source_name varchar, source_license varchar,
+                source_revision bigint, fetched_at timestamptz
             )"""
         )
         con.execute(
@@ -158,22 +213,25 @@ def _load_bronze(
                     item.fetched_at,
                 ],
             )
-            con.executemany(
-                "insert into bronze_quotes values (?, ?, ?, ?, ?, ?, ?, ?)",
+            rows = [
                 [
-                    [
-                        item.qid,
-                        item.name,
-                        quote.texto,
-                        quote.categoria.value,
-                        quote.obra,
-                        quote.fonte.url,
-                        item.revision,
-                        item.fetched_at,
-                    ]
-                    for quote in quotes
-                ],
-            )
+                    item.qid,
+                    item.name,
+                    quote.texto,
+                    quote.categoria.value,
+                    quote.obra,
+                    quote.fonte.url,
+                    quote.fonte.fonte,
+                    quote.fonte.licenca,
+                    item.revision,
+                    item.fetched_at,
+                ]
+                for quote in quotes
+            ]
+            if rows:
+                con.executemany(
+                    "insert into bronze_quotes values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
+                )
         con.execute(
             f"copy bronze_quotes to '{(bronze_dir / 'quotes.parquet').as_posix()}' "
             "(format parquet, compression zstd)"
@@ -196,51 +254,81 @@ def transform(*, warehouse: Path = WAREHOUSE) -> None:
 
 
 def publish(*, warehouse: Path = WAREHOUSE, serving: Path = SERVING) -> None:
-    """Gera um SQLite descartável e otimizado para leitura pela aplicação."""
+    """Gera e valida um SQLite novo antes de substituir o artefato publicado."""
     serving.parent.mkdir(parents=True, exist_ok=True)
-    serving.unlink(missing_ok=True)
-    with duckdb.connect(str(warehouse), read_only=True) as source, sqlite3.connect(serving) as out:
-        out.executescript(
-            """create table thinkers (
-                thinker_qid text primary key,
-                thinker_name text not null,
-                wikiquote_title text not null,
-                source_url text not null, source_revision integer not null, fetched_at text not null
-            );
-            create table quotes (
-                quote_id text primary key,
-                thinker_qid text not null references thinkers(thinker_qid),
-                quote_text text not null,
-                category text not null,
-                work text,
-                source_url text not null,
-                source_revision integer not null, character_count integer not null,
-                curation_status text not null, quality_reason text not null,
-                is_daily_eligible integer not null
-            );
-            create virtual table quotes_fts using fts5(
-                quote_text, content=quotes, content_rowid=rowid
-            );
-            """
-        )
-        thinkers = source.execute(
-            """select thinker_qid, thinker_name, wikiquote_title, source_url,
-                      source_revision, cast(fetched_at as varchar)
-               from dim_thinkers order by thinker_name"""
-        ).fetchall()
-        out.executemany("insert into thinkers values (?, ?, ?, ?, ?, ?)", thinkers)
-        quotes = source.execute(
-            """select quote_id, thinker_qid, quote_text, category, work, source_url,
-                      source_revision, character_count, curation_status, quality_reason,
-                      cast(is_daily_eligible as integer)
-               from fct_quotes order by thinker_qid, quote_id"""
-        ).fetchall()
-        out.executemany("insert into quotes values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", quotes)
-        out.execute(
-            "insert into quotes_fts(rowid, quote_text) select rowid, quote_text from quotes"
-        )
-        out.execute("create index idx_quotes_thinker on quotes(thinker_qid)")
-        out.execute("create index idx_quotes_daily on quotes(is_daily_eligible)")
+    candidate = serving.with_name(f".{serving.name}.next")
+    candidate.unlink(missing_ok=True)
+    try:
+        out = sqlite3.connect(candidate)
+        try:
+            out.execute("pragma foreign_keys = on")
+            with duckdb.connect(str(warehouse), read_only=True) as source:
+                out.executescript(
+                    """create table thinkers (
+                        thinker_qid text primary key,
+                        thinker_name text not null,
+                        wikiquote_title text not null,
+                        source_url text not null,
+                        source_revision integer not null,
+                        fetched_at text not null
+                    );
+                    create table quotes (
+                        occurrence_id text primary key,
+                        quote_id text not null,
+                        thinker_qid text not null references thinkers(thinker_qid),
+                        quote_text text not null,
+                        category text not null,
+                        work text,
+                        source_url text not null,
+                        source_name text not null,
+                        source_license text not null,
+                        source_revision integer not null,
+                        character_count integer not null,
+                        curation_status text not null,
+                        quality_reason text not null,
+                        quality_reasons text not null,
+                        is_daily_eligible integer not null check (is_daily_eligible in (0, 1))
+                    );
+                    create virtual table quotes_fts using fts5(
+                        quote_text, content=quotes, content_rowid=rowid
+                    );
+                    """
+                )
+                thinkers = source.execute(
+                    """select thinker_qid, thinker_name, wikiquote_title, source_url,
+                              source_revision, cast(fetched_at as varchar)
+                       from dim_thinkers order by thinker_name"""
+                ).fetchall()
+                out.executemany("insert into thinkers values (?, ?, ?, ?, ?, ?)", thinkers)
+                quotes = source.execute(
+                    """select occurrence_id, quote_id, thinker_qid, quote_text, category, work,
+                              source_url, source_name, source_license, source_revision,
+                              character_count, curation_status, quality_reason,
+                              to_json(quality_reasons), cast(is_daily_eligible as integer)
+                       from fct_quotes order by thinker_qid, occurrence_id"""
+                ).fetchall()
+                out.executemany(
+                    "insert into quotes values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    quotes,
+                )
+            out.execute(
+                "insert into quotes_fts(rowid, quote_text) select rowid, quote_text from quotes"
+            )
+            out.execute("create index idx_quotes_quote on quotes(quote_id)")
+            out.execute("create index idx_quotes_thinker on quotes(thinker_qid)")
+            out.execute("create index idx_quotes_daily on quotes(is_daily_eligible)")
+            if out.execute("pragma integrity_check").fetchone() != ("ok",):
+                raise RuntimeError("falha na verificação de integridade do SQLite")
+            if out.execute("select count(*) from quotes").fetchone() != (len(quotes),):
+                raise RuntimeError("contagem divergente no SQLite publicado")
+            out.execute("select count(*) from quotes_fts where quotes_fts match 'sisyphus'")
+            out.commit()
+        finally:
+            out.close()
+        os.replace(candidate, serving)
+    except Exception:
+        candidate.unlink(missing_ok=True)
+        raise
 
 
 def audit(*, warehouse: Path = WAREHOUSE, report: Path = REPORT) -> dict[str, int]:

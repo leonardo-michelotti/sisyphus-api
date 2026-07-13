@@ -18,32 +18,40 @@ antes da hora.
 flowchart LR
     WQ[Wikiquote] --> ING[Ingestão HTTP]
     WD[Wikidata] --> ING
-    ING --> RAW[Snapshots JSON]
+    ING --> RAW[Snapshots JSON imutáveis]
     ING --> BR[Bronze em Parquet]
     BR --> STG[Silver: stg_quotes]
     STG --> GOLD[Gold: fct_quotes]
     GOLD --> DB[SQLite + FTS5]
     GOLD --> QA[Relatório de auditoria]
-    DB --> API[FastAPI]
+    DB -. próximo marco .-> API[FastAPI]
 ```
 
 ## Bronze: preservar antes de interpretar
 
-Cada coleta registra nome solicitado, título canônico, QID, revisão da página e
-horário UTC. O JSON original das duas fontes é salvo em
-`data/bronze/{qid}-{revision}.json`. As tabelas de frases e pensadores também são
-exportadas como Parquet comprimido.
+Cada execução recebe um `run_id` e grava um diretório próprio em
+`data/bronze/{run_id}`. Os JSONs originais de Wikiquote e Wikidata ficam separados,
+com SHA-256 no nome e no manifesto. O manifesto também registra a revisão exata do
+conteúdo interpretado, o horário da coleta, a versão do parser e o estado da
+execução. Assim, duas respostas diferentes nunca sobrescrevem a mesma evidência.
+
+As tabelas de frases e pensadores são exportadas como Parquet comprimido dentro do
+mesmo diretório da execução. Uma página válida sem frases produz um Parquet vazio,
+sem interromper o restante do pipeline.
 
 ## Silver: identidade e normalização
 
-`stg_quotes` normaliza espaços, calcula o tamanho e gera `quote_id` a partir do
-QID e do texto normalizado. Repetir o pipeline sobre a mesma fonte produz os
-mesmos IDs. Duplicatas preservam a coleta mais recente.
+`stg_quotes` normaliza espaços e calcula o tamanho. `quote_id` identifica o conteúdo
+por QID e texto normalizado; `occurrence_id` identifica sua ocorrência editorial,
+incluindo categoria, obra e revisão da fonte. Os dois IDs são SHA-256 estáveis.
+Essa separação permite reconhecer a mesma frase sem apagar mudanças de contexto.
 
 ## Gold: decisão editorial explícita
 
 `fct_quotes` não reduz qualidade a um booleano opaco. Cada registro recebe
-`curation_status`, `quality_reason` e `is_daily_eligible`.
+`curation_status`, `quality_reasons` e `is_daily_eligible`. `quality_reasons` preserva
+todos os motivos encontrados. `quality_reason` continua disponível como motivo
+principal para consultas e relatórios compactos.
 
 | Condição | Estado | Motivo |
 |---|---|---|
@@ -60,9 +68,14 @@ registro da camada de origem.
 
 ## Artefato de publicação
 
-`data/sisyphus.db` é reconstruído a partir da gold. Ele contém chaves, índices e
-uma tabela FTS5 para busca textual. Não é fonte de verdade e não recebe migração.
-Se o esquema mudar, o pipeline gera outro arquivo.
+`data/sisyphus.db` é reconstruído a partir da gold. Ele contém proveniência,
+licença, chaves, índices e uma tabela FTS5 para busca textual. O pipeline primeiro
+monta e valida um candidato; somente depois substitui o arquivo vigente com uma
+operação atômica. Uma falha mantém intacto o último artefato válido.
+
+Esse SQLite ainda não alimenta a FastAPI publicada. A API continua consultando as
+fontes ao vivo; integrar o artefato curado à camada HTTP é o próximo marco do
+produto, não uma capacidade já entregue.
 
 ## Execução
 
