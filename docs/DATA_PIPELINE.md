@@ -91,14 +91,20 @@ licença, chaves, índices e uma tabela FTS5 para busca textual. O pipeline prim
 monta e valida um candidato; somente depois substitui o arquivo vigente com uma
 operação atômica. Uma falha mantém intacto o último artefato válido.
 
+`build_metadata` identifica o schema, o conteúdo integral servido, o `run_id`, as
+versões do pipeline e do parser, o SHA-256 do manifesto e o commit que gerou o
+artefato. `dataset_version` ignora apenas horários de coleta: qualquer mudança nos
+pensadores ou campos publicados das frases produz uma nova versão.
+
 O endpoint `/v1/quote-of-the-day` lê esse SQLite em modo somente leitura. A seleção
 considera apenas `is_daily_eligible`, permanece estável para a mesma data, filtros e
 versão do dataset, e informa `dataset_version` e `dataset_schema` na resposta. Os
 demais endpoints continuam consultando as fontes ao vivo.
 
-Não existe fallback silencioso. Se o arquivo estiver ausente, ilegível ou com
-schema incompatível, a rota responde `503` em `application/problem+json` e a
-readiness fica degradada.
+Não existe fallback silencioso. Se o arquivo estiver ausente, ilegível, com
+proveniência inválida ou schema incompatível, a rota responde `503` em
+`application/problem+json`. `/health/dataset` verifica somente esse artefato e pode
+ser usado no contêiner sem depender da disponibilidade momentânea da Wikimedia.
 
 Antes da troca do arquivo, a publicação exige todos os pensadores do catálogo e ao
 menos uma frase elegível para cada um deles. Esses gates cobrem as falhas destrutivas
@@ -114,15 +120,21 @@ Também é possível executar `ingest`, `transform`, `publish` ou `audit` como
 argumento. O resultado local inclui snapshots JSON, Parquet bronze, o warehouse
 DuckDB, o SQLite de publicação e `reports/data-quality.html`.
 
-Os artefatos derivados não são versionados. O código, as regras e os testes são.
+Os artefatos derivados não são versionados no Git. O código, as regras, os testes e
+o lock completo de dependências são.
 
 ## Disponibilização para a API
 
 A aplicação procura `data/sisyphus.db` por padrão. Outro caminho pode ser informado
-em `SISYPHUS_SERVING_DB_PATH`. Como o arquivo não é versionado no Git, um ambiente
-de produção só pode receber esta mudança depois que o dataset for distribuído como
-artefato versionado e montado ou copiado para o contêiner. O Dockerfile atual ainda
-não realiza essa etapa; por isso, merge e deploy devem ser decisões separadas.
+em `SISYPHUS_SERVING_DB_PATH`. `Dockerfile.release` cria uma imagem mínima com o
+SQLite validado e mantém bronze, DuckDB e dbt fora do runtime. O Dockerfile atual
+continua independente para não interromper o serviço que ainda consulta as fontes
+ao vivo.
+
+O workflow manual `release-image.yml` reconstrói a base, repete a validação, testa a
+imagem como usuário sem privilégios e só publica no GHCR quando `publish_image` é
+explicitamente habilitado. Publicar uma imagem e configurar o Railway continuam
+sendo decisões separadas. O procedimento está em [`RELEASE.md`](RELEASE.md).
 
 ## Limite atual
 

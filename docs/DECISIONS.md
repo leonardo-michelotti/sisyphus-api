@@ -57,6 +57,7 @@ Por que escolhemos o que escolhemos, em uma linha cada.
 | 024 | Grafo de influências via Wikidata P737 | Explora a natureza-grafo do Wikidata para linhagem intelectual — distinção visual que "sai da lista de frases". |
 | 025 | Servidor MCP expondo as capacidades como tools | Torna o sisyphus consumível por agentes de IA/Claude — diferencial 2026 que amarra a tese do produto. |
 | 026 | Frase-do-dia determinística + página-demo | Ataca o fator nº1 de portfólio (app rodando + 1ª impressão) com baixo esforço. |
+| 027 | Imagem de runtime imutável com SQLite curado | Une código e dataset validados no mesmo digest, sem carregar o pipeline em produção. |
 
 > Novos ADRs (019–026) estão como `proposto` e detalhados sob demanda ao iniciar
 > cada fase (ver `ROADMAP.md`). Os campos completos (contexto/alternativas/
@@ -602,3 +603,46 @@ hit foi sempre correta nos testes. O QID vem de `prop=pageprops` →
 - Depende da existência de página no Wikiquote PT (sem página → sem frases, o que
   já é o comportamento desejado). Homônimos raros podem exigir refinar a escolha
   da hit no futuro.
+
+---
+
+## ADR-027: Imagem imutável une aplicação e dataset curado
+
+**Status:** aceito
+
+### Contexto
+
+A frase do dia passa a depender de um SQLite gerado fora do runtime. O arquivo não
+deve entrar no Git, e construir o pipeline durante cada deploy introduziria rede,
+dbt e dados mutáveis no caminho crítico da publicação.
+
+### Decisão
+
+Gerar o SQLite em um workflow manual, validá-lo e construir uma imagem de runtime
+que contenha a aplicação e exatamente aquele banco. Publicar no GHCR somente com
+confirmação explícita, usando tag imutável, digest OCI e atestação de procedência.
+
+### Alternativas consideradas
+
+- **Construir durante o deploy no Railway:** mistura coleta e runtime, aumenta o
+  tempo de build e pode publicar resultados diferentes a partir do mesmo commit.
+- **Baixar um SQLite no início do contêiner:** cria uma dependência externa em cada
+  inicialização e permite divergência entre código e dataset.
+- **Versionar o SQLite no Git:** aumenta o repositório com um binário derivado e
+  enfraquece a separação entre fonte, regras e artefato.
+
+### Motivos
+
+- O digest identifica código, dependências e dados como uma unidade.
+- O runtime permanece pequeno e não carrega DuckDB, dbt ou credenciais de coleta.
+- O Railway pode retornar a uma imagem anterior sem reconstruir o dataset.
+- A publicação manual corresponde ao volume e à maturidade atual do produto.
+
+### Trade-offs e consequências
+
+- Uma nova base exige uma nova imagem.
+- A visibilidade do pacote e o plano do Railway precisam ser decididos antes do
+  primeiro deploy.
+- Tags não podem ser sobrescritas pelo processo normal de publicação.
+- A última tag e o digest aprovados devem permanecer registrados fora da retenção
+  operacional do Railway.
