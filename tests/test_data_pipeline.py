@@ -1,7 +1,9 @@
+import asyncio
 import json
 import sqlite3
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import duckdb
 import httpx
@@ -9,12 +11,15 @@ import pytest
 import respx
 
 from sisyphus.config import settings
+from sisyphus.pipeline import build
 from sisyphus.pipeline.build import (
     Snapshot,
     _fetch_one,
+    _get_with_retry,
     _load_bronze,
     _source_record,
     audit,
+    ingest,
     publish,
     transform,
 )
@@ -43,7 +48,7 @@ def test_pipeline_classifies_editorial_corpus(tmp_path: Path, fixtures_dir: Path
 
     _load_bronze([_snapshot(html)], warehouse=warehouse, bronze_dir=tmp_path / "bronze")
     transform(warehouse=warehouse)
-    publish(warehouse=warehouse, serving=serving)
+    publish(warehouse=warehouse, serving=serving, expected_thinkers={"Sócrates"})
     metrics = audit(warehouse=warehouse, report=report)
 
     with duckdb.connect(str(warehouse), read_only=True) as con:
@@ -202,3 +207,153 @@ async def test_fetch_rejects_payload_without_parsed_revision() -> None:
     async with httpx.AsyncClient() as client:
         with pytest.raises(RuntimeError, match="sem revisão"):
             await _fetch_one(client, "Sócrates")
+
+
+@respx.mock
+async def test_http_retries_only_transient_failures() -> None:
+    route = respx.get("https://example.test/source").mock(
+        side_effect=[
+            httpx.Response(503),
+            httpx.Response(429, headers={"Retry-After": "0"}),
+            httpx.Response(200, json={"ok": True}),
+        ]
+    )
+    sleep = AsyncMock()
+
+    with patch("sisyphus.pipeline.build.asyncio.sleep", sleep):
+        async with httpx.AsyncClient() as client:
+            response = await _get_with_retry(client, "https://example.test/source", params={})
+
+    assert response.json() == {"ok": True}
+    assert route.call_count == 3
+    assert sleep.await_count == 2
+    assert sleep.await_args_list[1].args == (0.0,)
+
+
+@respx.mock
+async def test_http_does_not_retry_permanent_failure() -> None:
+    route = respx.get("https://example.test/missing").mock(return_value=httpx.Response(404))
+    sleep = AsyncMock()
+
+    with patch("sisyphus.pipeline.build.asyncio.sleep", sleep):
+        async with httpx.AsyncClient() as client:
+            with pytest.raises(httpx.HTTPStatusError):
+                await _get_with_retry(client, "https://example.test/missing", params={})
+
+    assert route.call_count == 1
+    sleep.assert_not_awaited()
+
+
+def _named_snapshot(name: str, index: int) -> Snapshot:
+    return Snapshot(
+        name=name,
+        title=name,
+        qid=f"Q{index}",
+        revision=index,
+        fetched_at="2026-07-13T12:00:00+00:00",
+        wikiquote={"parse": {"revid": index, "text": "<div />"}},
+        wikidata={"entities": {f"Q{index}": {}}},
+    )
+
+
+async def test_ingest_limits_concurrency(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    names = tuple(f"Thinker {index}" for index in range(8))
+    active = 0
+    maximum = 0
+
+    async def fake_fetch(_client: httpx.AsyncClient, name: str) -> Snapshot:
+        nonlocal active, maximum
+        active += 1
+        maximum = max(maximum, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return _named_snapshot(name, names.index(name) + 1)
+
+    monkeypatch.setattr(build, "ALL_THINKERS", names)
+    monkeypatch.setattr(build, "_fetch_one", fake_fetch)
+
+    snapshots = await ingest(
+        bronze_root=tmp_path / "bronze",
+        warehouse=tmp_path / "warehouse.duckdb",
+        run_id="limited",
+        concurrency=4,
+    )
+
+    assert len(snapshots) == 8
+    assert maximum == 4
+
+
+async def test_failed_source_is_visible_in_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    names = ("Available", "Unavailable")
+
+    async def fake_fetch(_client: httpx.AsyncClient, name: str) -> Snapshot:
+        if name == "Unavailable":
+            raise httpx.ConnectError("offline")
+        return _named_snapshot(name, 1)
+
+    monkeypatch.setattr(build, "ALL_THINKERS", names)
+    monkeypatch.setattr(build, "_fetch_one", fake_fetch)
+
+    with pytest.raises(RuntimeError, match="warehouse não foi atualizado"):
+        await ingest(
+            bronze_root=tmp_path / "bronze",
+            warehouse=tmp_path / "warehouse.duckdb",
+            run_id="failed",
+        )
+
+    manifest = json.loads(
+        (tmp_path / "bronze" / "failed" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["status"] == "failed"
+    assert [(item["requested_name"], item["status"]) for item in manifest["sources"]] == [
+        ("Available", "success"),
+        ("Unavailable", "failed"),
+    ]
+    assert manifest["sources"][1]["error"] == "ConnectError"
+
+
+def _create_publication_warehouse(path: Path, *, eligible: bool) -> None:
+    with duckdb.connect(str(path)) as con:
+        con.execute(
+            """create table dim_thinkers as select
+               'Q913'::varchar thinker_qid, 'Sócrates'::varchar thinker_name,
+               'Sócrates'::varchar wikiquote_title, 'https://example.test'::varchar source_url,
+               1::bigint source_revision, current_timestamp fetched_at"""
+        )
+        con.execute(
+            """create table fct_quotes as select
+               'occurrence'::varchar occurrence_id, 'quote'::varchar quote_id,
+               'Q913'::varchar thinker_qid,
+               'Uma frase suficientemente longa para publicação.'::varchar quote_text,
+               'verificada'::varchar category, null::varchar as work,
+               'https://example.test'::varchar source_url, 'Wikiquote'::varchar source_name,
+               'CC BY-SA 4.0'::varchar source_license, 1::bigint source_revision,
+               45::integer character_count, 'accepted'::varchar curation_status,
+               'passed_automatic_rules'::varchar quality_reason,
+               ['passed_automatic_rules']::varchar[] quality_reasons,
+               ?::boolean is_daily_eligible""",
+            [eligible],
+        )
+
+
+@pytest.mark.parametrize(
+    ("eligible", "expected", "message"),
+    [
+        (False, {"Sócrates"}, "nenhuma frase elegível"),
+        (True, {"Sócrates", "Albert Camus"}, "pensadores ausentes: Albert Camus"),
+    ],
+)
+def test_publication_gates_preserve_current_database(
+    tmp_path: Path, eligible: bool, expected: set[str], message: str
+) -> None:
+    warehouse = tmp_path / "warehouse.duckdb"
+    serving = tmp_path / "sisyphus.db"
+    serving.write_bytes(b"current production artifact")
+    _create_publication_warehouse(warehouse, eligible=eligible)
+
+    with pytest.raises(RuntimeError, match=message):
+        publish(warehouse=warehouse, serving=serving, expected_thinkers=expected)
+
+    assert serving.read_bytes() == b"current production artifact"
