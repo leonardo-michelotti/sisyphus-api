@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import sqlite3
 from datetime import date
@@ -15,9 +16,11 @@ from sisyphus.config import settings
 from sisyphus.pipeline import build
 from sisyphus.pipeline.build import (
     Snapshot,
+    _dataset_version,
     _fetch_one,
     _get_with_retry,
     _load_bronze,
+    _record_build_provenance,
     _source_record,
     audit,
     ingest,
@@ -49,6 +52,11 @@ def test_pipeline_classifies_editorial_corpus(tmp_path: Path, fixtures_dir: Path
     )
 
     _load_bronze([_snapshot(html)], warehouse=warehouse, bronze_dir=tmp_path / "bronze")
+    _record_build_provenance(
+        warehouse,
+        run_id="fixture-run",
+        manifest_sha256="a" * 64,
+    )
     transform(warehouse=warehouse)
     publish(warehouse=warehouse, serving=serving, expected_thinkers={"Sócrates"})
     metrics = audit(warehouse=warehouse, report=report)
@@ -86,12 +94,11 @@ def test_pipeline_classifies_editorial_corpus(tmp_path: Path, fixtures_dir: Path
 
     with sqlite3.connect(serving) as con:
         assert con.execute("pragma integrity_check").fetchone() == ("ok",)
-        metadata = con.execute(
-            "select schema_version, dataset_version from build_metadata"
-        ).fetchone()
+        metadata = con.execute("select * from build_metadata").fetchone()
         assert metadata is not None
-        assert metadata[0] == 1
+        assert metadata[0] == 2
         assert len(metadata[1]) == 16
+        assert metadata[3:] == ("2", "1", "fixture-run", "a" * 64, "local")
         assert con.execute("select count(*) from quotes").fetchone() == (5,)
         assert con.execute(
             "select count(*) from quotes_fts where quotes_fts match 'velhice'"
@@ -125,6 +132,7 @@ def test_pipeline_classifies_editorial_corpus(tmp_path: Path, fixtures_dir: Path
 
 def test_bronze_accepts_page_without_quotes(tmp_path: Path) -> None:
     warehouse = tmp_path / "sisyphus.duckdb"
+    _record_build_provenance(warehouse, run_id="old", manifest_sha256="b" * 64)
     _load_bronze(
         [_snapshot("<div class='mw-parser-output'><p>Sem listas.</p></div>")],
         warehouse=warehouse,
@@ -134,6 +142,8 @@ def test_bronze_accepts_page_without_quotes(tmp_path: Path) -> None:
     with duckdb.connect(str(warehouse), read_only=True) as con:
         assert con.execute("select count(*) from bronze_thinkers").fetchone() == (1,)
         assert con.execute("select count(*) from bronze_quotes").fetchone() == (0,)
+        with pytest.raises(duckdb.CatalogException):
+            con.execute("select * from pipeline_build_metadata")
 
 
 def test_failed_publication_preserves_current_database(tmp_path: Path) -> None:
@@ -295,6 +305,14 @@ async def test_ingest_limits_concurrency(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     assert len(snapshots) == 8
     assert maximum == 4
+    manifest_path = tmp_path / "bronze" / "limited" / "manifest.json"
+    manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    with duckdb.connect(str(tmp_path / "warehouse.duckdb"), read_only=True) as connection:
+        assert connection.execute(
+            """select run_id, manifest_sha256, pipeline_version,
+                      parser_version, source_commit
+               from pipeline_build_metadata"""
+        ).fetchone() == ("limited", manifest_sha256, "2", "1", "local")
 
 
 async def test_failed_source_is_visible_in_manifest(
@@ -350,6 +368,36 @@ def _create_publication_warehouse(path: Path, *, eligible: bool) -> None:
                ?::boolean is_daily_eligible""",
             [eligible],
         )
+
+
+def test_dataset_version_covers_all_serving_fields() -> None:
+    thinkers = [("Q1", "Nome", "Título", "https://example.test", 1)]
+    quote = (
+        "occurrence",
+        "quote",
+        "Q1",
+        "Uma frase suficientemente longa para publicação.",
+        "verificada",
+        None,
+        "https://example.test",
+        "Wikiquote",
+        "CC BY-SA 4.0",
+        1,
+        48,
+        "accepted",
+        "passed_automatic_rules",
+        '["passed_automatic_rules"]',
+        1,
+    )
+
+    original = _dataset_version(thinkers, [quote])
+    changed_license = _dataset_version(thinkers, [(*quote[:8], "CC BY-SA 5.0", *quote[9:])])
+    changed_thinker = _dataset_version(
+        [("Q1", "Outro nome", "Título", "https://example.test", 1)], [quote]
+    )
+
+    assert original != changed_license
+    assert original != changed_thinker
 
 
 @pytest.mark.parametrize(

@@ -34,6 +34,34 @@ async def _ping(http: httpx.AsyncClient, url: str) -> bool:
         return False
 
 
+async def _dataset_status() -> tuple[dict[str, str | int], bool]:
+    repository = SQLiteQuoteRepository(settings.serving_db_path)
+    try:
+        metadata = await asyncio.to_thread(repository.metadata)
+        return (
+            {
+                "status": "ok",
+                "schema": metadata.schema_version,
+                "version": metadata.dataset_version,
+            },
+            True,
+        )
+    except DatasetUnavailable:
+        return {"status": "down"}, False
+
+
+@router.get(
+    "/health/dataset",
+    summary="Healthcheck local — o artefato curado está pronto",
+)
+async def dataset_health() -> JSONResponse:
+    dataset, ok = await _dataset_status()
+    return JSONResponse(
+        status_code=200 if ok else 503,
+        content={"status": "ready" if ok else "degraded", "dataset": dataset},
+    )
+
+
 @router.get("/health/ready", summary="Readiness — as fontes upstream respondem")
 async def ready(request: Request) -> JSONResponse:
     http: httpx.AsyncClient = request.app.state.http
@@ -42,18 +70,7 @@ async def ready(request: Request) -> JSONResponse:
         _ping(http, settings.wikidata_api),
     )
     sources = {"wikiquote": wq, "wikidata": wd}
-    repository = SQLiteQuoteRepository(settings.serving_db_path)
-    try:
-        schema_version, dataset_version = await asyncio.to_thread(repository.metadata)
-        dataset: dict[str, str | int] = {
-            "status": "ok",
-            "schema": schema_version,
-            "version": dataset_version,
-        }
-        dataset_ok = True
-    except DatasetUnavailable:
-        dataset = {"status": "down"}
-        dataset_ok = False
+    dataset, dataset_ok = await _dataset_status()
     ok = all(sources.values()) and dataset_ok
     return JSONResponse(
         status_code=200 if ok else 503,

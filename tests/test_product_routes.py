@@ -62,8 +62,8 @@ class FakeDailyRepository:
             ),
             modo=SelectionMode.daily,
             data="2026-07-13",
-            dataset_version="dataset-test",
-            dataset_schema=1,
+            dataset_version="0123456789abcdef",
+            dataset_schema=2,
         )
 
 
@@ -105,8 +105,8 @@ def test_quote_of_the_day_exposes_selection_context() -> None:
     assert response.status_code == 200
     assert response.json()["modo"] == "daily"
     assert response.json()["frase"]["autor"] == "Albert Camus"
-    assert response.json()["dataset_version"] == "dataset-test"
-    assert response.json()["dataset_schema"] == 1
+    assert response.json()["dataset_version"] == "0123456789abcdef"
+    assert response.json()["dataset_schema"] == 2
     assert response.headers["cache-control"] == "public, max-age=3600"
     assert "etag" in response.headers
 

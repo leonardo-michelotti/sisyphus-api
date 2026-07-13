@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Protocol
 
 from ..catalog import ALL_THINKERS, get_collection
-from ..dataset import SERVING_SCHEMA_VERSION
+from ..dataset import SERVING_SCHEMA_VERSION, DatasetMetadata
 from ..errors import DatasetUnavailable, InvalidSelection, NoQuotesAvailable, ThinkerNotFound
 from ..schemas import Attribution, CuratedQuoteSelection, Quote, QuoteCategory, SelectionMode
 
@@ -43,20 +43,53 @@ class SQLiteQuoteRepository:
         connection.row_factory = sqlite3.Row
         return connection
 
-    def metadata(self) -> tuple[int, str]:
+    def metadata(self) -> DatasetMetadata:
         try:
             with self._connect() as connection:
-                row = connection.execute(
-                    "select schema_version, dataset_version from build_metadata"
-                ).fetchone()
+                rows = connection.execute(
+                    """select schema_version, dataset_version, source_fetched_at,
+                              pipeline_version, parser_version, run_id,
+                              manifest_sha256, source_commit
+                       from build_metadata"""
+                ).fetchall()
         except sqlite3.Error as exc:
             raise DatasetUnavailable("Metadados da base curada estão ausentes") from exc
+        if len(rows) != 1:
+            raise DatasetUnavailable("Metadados da base curada são inválidos")
+        row = rows[0]
         if row is None or row["schema_version"] != SERVING_SCHEMA_VERSION:
             raise DatasetUnavailable("Versão incompatível da base curada")
-        version = row["dataset_version"]
-        if not isinstance(version, str) or not version:
-            raise DatasetUnavailable("Versão da base curada está ausente")
-        return SERVING_SCHEMA_VERSION, version
+        required = (
+            "dataset_version",
+            "source_fetched_at",
+            "pipeline_version",
+            "parser_version",
+            "run_id",
+            "manifest_sha256",
+            "source_commit",
+        )
+        if any(not isinstance(row[field], str) or not row[field].strip() for field in required):
+            raise DatasetUnavailable("Proveniência da base curada está incompleta")
+        dataset_version = row["dataset_version"]
+        if len(dataset_version) != 16 or any(
+            character not in "0123456789abcdef" for character in dataset_version
+        ):
+            raise DatasetUnavailable("Versão da base curada é inválida")
+        manifest_sha256 = row["manifest_sha256"]
+        if len(manifest_sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in manifest_sha256
+        ):
+            raise DatasetUnavailable("Hash do manifesto da base curada é inválido")
+        return DatasetMetadata(
+            schema_version=SERVING_SCHEMA_VERSION,
+            dataset_version=dataset_version,
+            source_fetched_at=row["source_fetched_at"],
+            pipeline_version=row["pipeline_version"],
+            parser_version=row["parser_version"],
+            run_id=row["run_id"],
+            manifest_sha256=manifest_sha256,
+            source_commit=row["source_commit"],
+        )
 
     def is_ready(self) -> bool:
         try:
@@ -83,7 +116,7 @@ class SQLiteQuoteRepository:
             [thinker] if thinker else collection.pensadores if collection else ALL_THINKERS
         )
         selected_date = on_date or datetime.now(timezone.utc).date()
-        schema_version, dataset_version = self.metadata()
+        metadata = self.metadata()
 
         placeholders = ", ".join("?" for _ in candidates)
         clauses = ["q.is_daily_eligible = 1", f"t.thinker_name in ({placeholders})"]
@@ -111,7 +144,7 @@ class SQLiteQuoteRepository:
 
         key = "|".join(
             [
-                dataset_version,
+                metadata.dataset_version,
                 selected_date.isoformat(),
                 thinker or "",
                 collection_slug or "",
@@ -135,6 +168,6 @@ class SQLiteQuoteRepository:
             modo=SelectionMode.daily,
             data=selected_date.isoformat(),
             colecao=collection,
-            dataset_version=dataset_version,
-            dataset_schema=schema_version,
+            dataset_version=metadata.dataset_version,
+            dataset_schema=metadata.schema_version,
         )

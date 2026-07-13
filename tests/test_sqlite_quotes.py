@@ -19,13 +19,18 @@ from sisyphus.repositories.quotes import SQLiteQuoteRepository
 from sisyphus.schemas import QuoteCategory
 
 
-def _database(path: Path, *, schema_version: int = 1) -> Path:
+def _database(path: Path, *, schema_version: int = 2) -> Path:
     with sqlite3.connect(path) as connection:
         connection.executescript(
             """create table build_metadata (
                 schema_version integer not null,
                 dataset_version text not null,
-                source_fetched_at text not null
+                source_fetched_at text not null,
+                pipeline_version text not null,
+                parser_version text not null,
+                run_id text not null,
+                manifest_sha256 text not null,
+                source_commit text not null
             );
             create table thinkers (
                 thinker_qid text primary key,
@@ -45,8 +50,11 @@ def _database(path: Path, *, schema_version: int = 1) -> Path:
             );"""
         )
         connection.execute(
-            "insert into build_metadata values (?, 'dataset-abc', '2026-07-13T12:00:00Z')",
-            [schema_version],
+            """insert into build_metadata values (
+                   ?, '0123456789abcdef', '2026-07-13T12:00:00Z',
+                   '2', '1', 'run-test', ?, 'commit-test'
+               )""",
+            [schema_version, "a" * 64],
         )
         connection.executemany(
             "insert into thinkers values (?, ?)",
@@ -104,8 +112,8 @@ def test_daily_selection_is_stable_and_reports_dataset(tmp_path: Path) -> None:
 
     assert first == second
     assert first.data == "2026-07-13"
-    assert first.dataset_version == "dataset-abc"
-    assert first.dataset_schema == 1
+    assert first.dataset_version == "0123456789abcdef"
+    assert first.dataset_schema == 2
     assert first.frase.fonte.licenca == "CC BY-SA 4.0"
 
 
@@ -162,6 +170,15 @@ def test_incompatible_database_fails_without_fallback(tmp_path: Path) -> None:
         repository.select(on_date=date(2026, 7, 13))
 
 
+def test_invalid_provenance_fails_without_fallback(tmp_path: Path) -> None:
+    path = _database(tmp_path / "invalid-provenance.db")
+    with sqlite3.connect(path) as connection:
+        connection.execute("update build_metadata set manifest_sha256 = 'invalid'")
+
+    with pytest.raises(DatasetUnavailable, match="Hash do manifesto"):
+        SQLiteQuoteRepository(path).select(on_date=date(2026, 7, 13))
+
+
 @respx.mock
 def test_readiness_reports_dataset_version(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(settings, "serving_db_path", _database(tmp_path / "sisyphus.db"))
@@ -174,9 +191,36 @@ def test_readiness_reports_dataset_version(monkeypatch: pytest.MonkeyPatch, tmp_
     assert response.status_code == 200
     assert response.json()["dataset"] == {
         "status": "ok",
-        "schema": 1,
-        "version": "dataset-abc",
+        "schema": 2,
+        "version": "0123456789abcdef",
     }
+
+
+def test_local_dataset_health_does_not_call_upstreams(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(settings, "serving_db_path", _database(tmp_path / "sisyphus.db"))
+
+    with TestClient(create_app()) as client:
+        response = client.get("/health/dataset")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "dataset": {"status": "ok", "schema": 2, "version": "0123456789abcdef"},
+    }
+
+
+def test_local_dataset_health_fails_without_artifact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(settings, "serving_db_path", tmp_path / "missing.db")
+
+    with TestClient(create_app()) as client:
+        response = client.get("/health/dataset")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "degraded", "dataset": {"status": "down"}}
 
 
 @respx.mock
