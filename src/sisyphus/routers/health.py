@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..config import settings
+from ..errors import DatasetUnavailable
+from ..repositories.quotes import SQLiteQuoteRepository
 
 router = APIRouter(tags=["infra"])
 
@@ -40,12 +42,25 @@ async def ready(request: Request) -> JSONResponse:
         _ping(http, settings.wikidata_api),
     )
     sources = {"wikiquote": wq, "wikidata": wd}
-    ok = all(sources.values())
+    repository = SQLiteQuoteRepository(settings.serving_db_path)
+    try:
+        schema_version, dataset_version = await asyncio.to_thread(repository.metadata)
+        dataset: dict[str, str | int] = {
+            "status": "ok",
+            "schema": schema_version,
+            "version": dataset_version,
+        }
+        dataset_ok = True
+    except DatasetUnavailable:
+        dataset = {"status": "down"}
+        dataset_ok = False
+    ok = all(sources.values()) and dataset_ok
     return JSONResponse(
         status_code=200 if ok else 503,
         content={
             "status": "ready" if ok else "degraded",
             "version": __version__,
             "sources": {k: "ok" if v else "down" for k, v in sources.items()},
+            "dataset": dataset,
         },
     )

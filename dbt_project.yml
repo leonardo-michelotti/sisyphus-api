@@ -4,6 +4,7 @@ config-version: 2
 profile: sisyphus
 model-paths: ["dbt/models"]
 test-paths: ["dbt/tests"]
+seed-paths: ["dbt/seeds"]
 clean-targets: ["target", "logs"]
 models:
   sisyphus:

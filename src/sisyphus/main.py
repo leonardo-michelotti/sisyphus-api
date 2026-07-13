@@ -28,6 +28,7 @@ _PROBLEM_RESPONSES: dict[int | str, dict[str, object]] = {
     404: {"model": ProblemDetail, "description": "Pensador não encontrado"},
     429: {"model": ProblemDetail, "description": "Limite de requisições excedido"},
     502: {"model": ProblemDetail, "description": "Fonte upstream indisponível"},
+    503: {"model": ProblemDetail, "description": "Base curada indisponível"},
     504: {"model": ProblemDetail, "description": "Fonte upstream expirou"},
 }
 

@@ -17,6 +17,15 @@ classified as (
             case when attributed then 'attributed_quote' end
         ], reason -> reason is not null) as quality_reasons
     from assessed
+),
+curated as (
+    select
+        classified.*,
+        selection.quote_id is not null as editorial_approved
+    from classified
+    left join {{ ref('daily_quote_selection') }} selection
+        on classified.quote_id = selection.quote_id
+        and classified.thinker_qid = selection.thinker_qid
 )
 select
     *,
@@ -32,5 +41,10 @@ select
     not citation_only
         and not very_short
         and not very_long
-        and not attributed as is_daily_eligible
-from classified
+        and not attributed as passes_automatic_rules,
+    not citation_only
+        and not very_short
+        and not very_long
+        and not attributed
+        and editorial_approved as is_daily_eligible
+from curated

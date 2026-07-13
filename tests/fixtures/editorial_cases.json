@@ -24,7 +24,14 @@
     "text": "Se estou a viver mais tempo, talvez devo viver minha velhice, vendo e ouvindo menos.",
     "expected_status": "accepted",
     "expected_reason": "passed_automatic_rules",
+    "daily_eligible": false,
+    "decision": "Passa pelas regras automáticas, mas não está na allowlist editorial."
+  },
+  {
+    "text": "A admiração é o sentimento de um filósofo, e a filosofia começa pela admiração.",
+    "expected_status": "accepted",
+    "expected_reason": "passed_automatic_rules",
     "daily_eligible": true,
-    "decision": "Frase completa, com tamanho adequado e seção de obra."
+    "decision": "Frase revisada manualmente e aprovada para a seleção diária."
   }
 ]

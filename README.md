@@ -171,7 +171,9 @@ print(f'{selection["frase"]["texto"]} — {selection["frase"]["autor"]}')
   },
   "modo": "daily",
   "data": "2026-07-12",
-  "colecao": null
+  "colecao": null,
+  "dataset_version": "10de7c77f7180fc8",
+  "dataset_schema": 1
 }
 ```
 
@@ -199,7 +201,7 @@ O conteúdo e o autor variam conforme a data e os filtros.
 | `GET` | `/v1/thinkers/{nome}/influences` | Influências diretas via Wikidata P737 |
 | `GET` | `/v1/search?q=` | Busca de personalidades por nome |
 | `GET` | `/v1/quotes/random` | Frase aleatória com filtros |
-| `GET` | `/v1/quote-of-the-day` | Frase diária determinística em UTC |
+| `GET` | `/v1/quote-of-the-day` | Frase diária curada e determinística em UTC |
 | `GET` | `/v1/collections` | Coleções editoriais de personalidades |
 | `GET` | `/widget` | Widget incorporável |
 | `GET` | `/influences` | Mapa visual de influências |
@@ -215,7 +217,8 @@ headers de rate limit quando aplicável. A seleção aleatória usa
 ```text
 Cliente
   └─ FastAPI
-       ├─ Wikiquote → resolução de nome e frases
+       ├─ SQLite    → frase do dia curada e versão do dataset
+       ├─ Wikiquote → resolução de nome e demais frases
        ├─ Wikidata  → biografia, obras e influências P737
        └─ serviços  → seleção, filtros, atribuição e cache
             ├─ REST JSON
@@ -227,6 +230,12 @@ O nome informado é resolvido primeiro pela página do Wikiquote. O QID associad
 a essa página identifica a mesma pessoa no Wikidata, reduzindo o risco de
 combinar entidades homônimas. Biografia e frases são consultadas de forma
 concorrente, com cache interno e validação dos contratos na borda.
+
+A frase do dia é a primeira rota migrada para a base curada e usa apenas uma
+allowlist editorial revisada manualmente. Ela não retorna ao
+Wikiquote quando o SQLite está ausente ou incompatível: responde `503` e preserva
+essa falha na readiness. O widget e os demais endpoints continuam no caminho ao
+vivo até suas migrações serem avaliadas separadamente.
 
 As decisões e os limites técnicos estão registrados em
 [`docs/DECISIONS.md`](docs/DECISIONS.md),

@@ -49,6 +49,12 @@ class InvalidSelection(SisyphusError):
     type = "/problems/invalid-selection"
 
 
+class DatasetUnavailable(SisyphusError):
+    status = 503
+    title = "Base curada indisponível"
+    type = "/problems/dataset-unavailable"
+
+
 class UpstreamError(SisyphusError):
     status = 502
     title = "Fonte upstream indisponível"

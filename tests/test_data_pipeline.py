@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sqlite3
+from datetime import date
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -23,6 +24,7 @@ from sisyphus.pipeline.build import (
     publish,
     transform,
 )
+from sisyphus.repositories.quotes import SQLiteQuoteRepository
 
 
 def _snapshot(html: str) -> Snapshot:
@@ -84,7 +86,13 @@ def test_pipeline_classifies_editorial_corpus(tmp_path: Path, fixtures_dir: Path
 
     with sqlite3.connect(serving) as con:
         assert con.execute("pragma integrity_check").fetchone() == ("ok",)
-        assert con.execute("select count(*) from quotes").fetchone() == (4,)
+        metadata = con.execute(
+            "select schema_version, dataset_version from build_metadata"
+        ).fetchone()
+        assert metadata is not None
+        assert metadata[0] == 1
+        assert len(metadata[1]) == 16
+        assert con.execute("select count(*) from quotes").fetchone() == (5,)
         assert con.execute(
             "select count(*) from quotes_fts where quotes_fts match 'velhice'"
         ).fetchone() == (1,)
@@ -98,10 +106,16 @@ def test_pipeline_classifies_editorial_corpus(tmp_path: Path, fixtures_dir: Path
             "select distinct source_name, source_license from quotes"
         ).fetchall() == [("Wikiquote", "CC BY-SA 4.0")]
 
+    selection = SQLiteQuoteRepository(serving).select(thinker="Sócrates", on_date=date(2026, 7, 13))
+    assert selection.frase.texto == (
+        "A admiração é o sentimento de um filósofo, e a filosofia começa pela admiração."
+    )
+    assert selection.dataset_version == metadata[1]
+
     assert metrics == {
-        "total": 4,
+        "total": 5,
         "thinkers": 1,
-        "accepted": 1,
+        "accepted": 2,
         "review": 2,
         "rejected": 1,
         "daily": 1,

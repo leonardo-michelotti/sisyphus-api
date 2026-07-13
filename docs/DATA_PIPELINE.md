@@ -61,9 +61,10 @@ Essa separação permite reconhecer a mesma frase sem apagar mudanças de contex
 ## Gold: decisão editorial explícita
 
 `fct_quotes` não reduz qualidade a um booleano opaco. Cada registro recebe
-`curation_status`, `quality_reasons` e `is_daily_eligible`. `quality_reasons` preserva
-todos os motivos encontrados. `quality_reason` continua disponível como motivo
-principal para consultas e relatórios compactos.
+`curation_status`, `quality_reasons`, `passes_automatic_rules`,
+`editorial_approved` e `is_daily_eligible`. `quality_reasons` preserva todos os
+motivos encontrados. `quality_reason` continua disponível como motivo principal
+para consultas e relatórios compactos.
 
 | Condição | Estado | Motivo |
 |---|---|---|
@@ -73,10 +74,15 @@ principal para consultas e relatórios compactos.
 | Seção de atribuídas | revisão | `attributed_quote` |
 | Nenhuma ocorrência acima | aceito | `passed_automatic_rules` |
 
-Os limites não afirmam que uma frase curta, longa ou atribuída esteja errada.
-Eles dizem que uma pessoa deve avaliá-la antes que o produto a destaque. Foi essa
-distinção que retirou `Memorabilia IV. 8.8` do conjunto diário sem apagar o
-registro da camada de origem.
+Os limites não afirmam que uma frase curta, longa ou atribuída esteja errada. Eles
+dizem que uma pessoa deve avaliá-la antes que o produto a destaque. Passar pelas
+regras automáticas também não basta: `dbt/seeds/daily_quote_selection.csv` contém
+uma allowlist revisada manualmente, inicialmente com uma frase para cada um dos 18
+pensadores. `is_daily_eligible` só é verdadeiro quando as duas condições passam.
+
+Essa distinção retirou `Memorabilia IV. 8.8` e trechos narrativos do conjunto
+diário sem apagá-los da camada de origem. Se uma edição da fonte mudar o texto e,
+portanto, seu `quote_id`, o gate bloqueia a publicação até nova revisão humana.
 
 ## Artefato de publicação
 
@@ -85,12 +91,17 @@ licença, chaves, índices e uma tabela FTS5 para busca textual. O pipeline prim
 monta e valida um candidato; somente depois substitui o arquivo vigente com uma
 operação atômica. Uma falha mantém intacto o último artefato válido.
 
-Esse SQLite ainda não alimenta a FastAPI publicada. A API continua consultando as
-fontes ao vivo; integrar o artefato curado à camada HTTP é o próximo marco do
-produto, não uma capacidade já entregue.
+O endpoint `/v1/quote-of-the-day` lê esse SQLite em modo somente leitura. A seleção
+considera apenas `is_daily_eligible`, permanece estável para a mesma data, filtros e
+versão do dataset, e informa `dataset_version` e `dataset_schema` na resposta. Os
+demais endpoints continuam consultando as fontes ao vivo.
 
-Antes da troca do arquivo, a publicação também exige todos os pensadores do
-catálogo e ao menos uma frase elegível. Esses gates cobrem as falhas destrutivas
+Não existe fallback silencioso. Se o arquivo estiver ausente, ilegível ou com
+schema incompatível, a rota responde `503` em `application/problem+json` e a
+readiness fica degradada.
+
+Antes da troca do arquivo, a publicação exige todos os pensadores do catálogo e ao
+menos uma frase elegível para cada um deles. Esses gates cobrem as falhas destrutivas
 para o MVP sem presumir volume ou infraestrutura que o produto ainda não possui.
 
 ## Execução
@@ -104,6 +115,14 @@ argumento. O resultado local inclui snapshots JSON, Parquet bronze, o warehouse
 DuckDB, o SQLite de publicação e `reports/data-quality.html`.
 
 Os artefatos derivados não são versionados. O código, as regras e os testes são.
+
+## Disponibilização para a API
+
+A aplicação procura `data/sisyphus.db` por padrão. Outro caminho pode ser informado
+em `SISYPHUS_SERVING_DB_PATH`. Como o arquivo não é versionado no Git, um ambiente
+de produção só pode receber esta mudança depois que o dataset for distribuído como
+artefato versionado e montado ou copiado para o contêiner. O Dockerfile atual ainda
+não realiza essa etapa; por isso, merge e deploy devem ser decisões separadas.
 
 ## Limite atual
 

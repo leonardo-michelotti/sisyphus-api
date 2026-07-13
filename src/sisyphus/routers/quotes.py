@@ -7,8 +7,9 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response
 
 from ..catalog import get_collection, list_collections
-from ..deps import Service
+from ..deps import DailyQuotes, Service
 from ..schemas import (
+    CuratedQuoteSelection,
     EditorialCollection,
     ListMeta,
     Page,
@@ -69,11 +70,16 @@ async def random_quote(
 
 
 @router.get("/quote-of-the-day", summary="Frase diária determinística em UTC")
-async def quote_of_the_day(
-    service: Service,
+def quote_of_the_day(
+    repository: DailyQuotes,
     thinker: Annotated[str | None, Query(description="Nome de uma personalidade")] = None,
     collection: Annotated[str | None, Query(description="Slug de uma coleção")] = None,
     category: QuoteCategory | None = None,
     max_length: Annotated[int | None, Query(ge=40, le=1000)] = None,
-) -> QuoteSelection:
-    return await _selection(service, SelectionMode.daily, thinker, collection, category, max_length)
+) -> CuratedQuoteSelection:
+    return repository.select(
+        thinker=thinker,
+        collection_slug=collection,
+        category=category,
+        max_length=max_length,
+    )
