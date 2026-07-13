@@ -9,3 +9,12 @@ venv/
 .env
 dist/
 build/
+data/bronze/
+data/sisyphus.duckdb
+data/sisyphus.db
+dbt/logs/
+dbt/target/
+reports/data-quality.html
+.user.yml
+logs/
+target/

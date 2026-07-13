@@ -1,0 +1,42 @@
+version: 2
+
+sources:
+  - name: bronze
+    schema: main
+    tables:
+      - name: bronze_quotes
+      - name: bronze_thinkers
+
+models:
+  - name: stg_quotes
+    description: Frases normalizadas, ainda sem decisão editorial.
+    columns:
+      - name: quote_id
+        tests: [not_null, unique]
+      - name: thinker_qid
+        tests: [not_null]
+      - name: category
+        tests:
+          - accepted_values:
+              arguments:
+                values: [verificada, obra, atribuida]
+  - name: dim_thinkers
+    columns:
+      - name: thinker_qid
+        tests: [not_null, unique]
+  - name: fct_quotes
+    description: Catálogo editorial com decisão e motivo de qualidade explícitos.
+    columns:
+      - name: quote_id
+        tests: [not_null, unique]
+      - name: thinker_qid
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_thinkers')
+                field: thinker_qid
+      - name: curation_status
+        tests:
+          - accepted_values:
+              arguments:
+                values: [accepted, review, rejected]
