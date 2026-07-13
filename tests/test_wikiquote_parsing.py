@@ -1,5 +1,15 @@
+from pathlib import Path
+
 from sisyphus.clients.wikiquote import parse_quotes
 from sisyphus.schemas import QuoteCategory
+
+
+def test_socrates_fixture_preserves_quote_and_reference(fixtures_dir: Path) -> None:
+    html = (fixtures_dir / "socrates_edge_cases.html").read_text(encoding="utf-8")
+    texts = [q.texto for q in parse_quotes(html, autor="Sócrates", page_url="http://x")]
+
+    assert "Memorabilia IV. 8.8" in texts
+    assert "Só sei que nada sei." in texts
 
 
 def test_extrai_muitas_frases(camus_html: str) -> None:

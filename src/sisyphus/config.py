@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     wikidata_api: str = "https://www.wikidata.org/w/api.php"
 
     # Boa cidadania com as APIs Wikimedia: identifique o cliente (com contato).
-    user_agent: str = "sisyphus/0.1 (https://github.com/leonardo-michelotti/sisyphus)"
+    user_agent: str = "sisyphus/0.1 (https://github.com/leonardo-michelotti/sisyphus-api)"
 
     # Rede e cache (ADR-005: TTL, começa em memória)
     http_timeout: float = 10.0

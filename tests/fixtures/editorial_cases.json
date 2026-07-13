@@ -1,0 +1,30 @@
+[
+  {
+    "text": "Memorabilia IV. 8.8",
+    "expected_status": "rejected",
+    "expected_reason": "citation_only",
+    "daily_eligible": false,
+    "decision": "Referência bibliográfica sem conteúdo citável."
+  },
+  {
+    "text": "A sabedoria começa na reflexão.",
+    "expected_status": "review",
+    "expected_reason": "short_text",
+    "daily_eligible": false,
+    "decision": "Frase atribuída e curta; exige confirmação humana."
+  },
+  {
+    "text": "Só sei que nada sei.",
+    "expected_status": "review",
+    "expected_reason": "short_text",
+    "daily_eligible": false,
+    "decision": "Exemplo curto legítimo que não pode ser confundido com referência."
+  },
+  {
+    "text": "Se estou a viver mais tempo, talvez devo viver minha velhice, vendo e ouvindo menos.",
+    "expected_status": "accepted",
+    "expected_reason": "passed_automatic_rules",
+    "daily_eligible": true,
+    "decision": "Frase completa, com tamanho adequado e seção de obra."
+  }
+]

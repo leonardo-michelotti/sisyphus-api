@@ -8,6 +8,11 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture
+def fixtures_dir() -> Path:
+    return FIXTURES
+
+
+@pytest.fixture
 def camus_html() -> str:
     return (FIXTURES / "camus_quotes.html").read_text(encoding="utf-8")
 

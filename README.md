@@ -233,6 +233,26 @@ As decisões e os limites técnicos estão registrados em
 [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) e
 [`docs/PILARES_TECNICOS.md`](docs/PILARES_TECNICOS.md).
 
+### A base curada
+
+A consulta ao vivo continua sendo a borda do produto. Em paralelo, um pipeline
+reproduzível preserva snapshots das fontes, normaliza as frases e separa conteúdo
+coletado de conteúdo pronto para destaque.
+
+```text
+Wikiquote + Wikidata
+  └─ Python + HTTPX
+       └─ bronze: JSON e Parquet
+            └─ dbt-duckdb: silver e gold com testes
+                 ├─ SQLite + FTS5 para a API
+                 └─ relatório de auditoria
+```
+
+O runner `run_pipeline.py` encadeia ingestão, transformação, publicação e
+auditoria. As regras não apagam casos duvidosos: elas registram se cada frase foi
+aceita, enviada para revisão ou rejeitada, sempre com o motivo. A implementação e
+as decisões estão em [`docs/DATA_PIPELINE.md`](docs/DATA_PIPELINE.md).
+
 ## Desenvolvimento local
 
 Requer Python 3.10 ou superior.
