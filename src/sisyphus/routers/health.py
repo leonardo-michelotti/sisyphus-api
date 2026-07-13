@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 
 from .. import __version__
 from ..config import settings
+from ..errors import DatasetUnavailable
+from ..repositories.quotes import SQLiteQuoteRepository
 
 router = APIRouter(tags=["infra"])
 
@@ -32,6 +34,34 @@ async def _ping(http: httpx.AsyncClient, url: str) -> bool:
         return False
 
 
+async def _dataset_status() -> tuple[dict[str, str | int], bool]:
+    repository = SQLiteQuoteRepository(settings.serving_db_path)
+    try:
+        metadata = await asyncio.to_thread(repository.metadata)
+        return (
+            {
+                "status": "ok",
+                "schema": metadata.schema_version,
+                "version": metadata.dataset_version,
+            },
+            True,
+        )
+    except DatasetUnavailable:
+        return {"status": "down"}, False
+
+
+@router.get(
+    "/health/dataset",
+    summary="Healthcheck local — o artefato curado está pronto",
+)
+async def dataset_health() -> JSONResponse:
+    dataset, ok = await _dataset_status()
+    return JSONResponse(
+        status_code=200 if ok else 503,
+        content={"status": "ready" if ok else "degraded", "dataset": dataset},
+    )
+
+
 @router.get("/health/ready", summary="Readiness — as fontes upstream respondem")
 async def ready(request: Request) -> JSONResponse:
     http: httpx.AsyncClient = request.app.state.http
@@ -40,12 +70,14 @@ async def ready(request: Request) -> JSONResponse:
         _ping(http, settings.wikidata_api),
     )
     sources = {"wikiquote": wq, "wikidata": wd}
-    ok = all(sources.values())
+    dataset, dataset_ok = await _dataset_status()
+    ok = all(sources.values()) and dataset_ok
     return JSONResponse(
         status_code=200 if ok else 503,
         content={
             "status": "ready" if ok else "degraded",
             "version": __version__,
             "sources": {k: "ok" if v else "down" for k, v in sources.items()},
+            "dataset": dataset,
         },
     )

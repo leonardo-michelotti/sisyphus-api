@@ -1,5 +1,7 @@
 """Configuração via pydantic-settings (ADR-008). Nada de segredo/flag no código."""
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -9,6 +11,7 @@ class Settings(BaseSettings):
     # Fontes
     wikiquote_api: str = "https://pt.wikiquote.org/w/api.php"
     wikidata_api: str = "https://www.wikidata.org/w/api.php"
+    serving_db_path: Path = Path("data/sisyphus.db")
 
     # Boa cidadania com as APIs Wikimedia: identifique o cliente (com contato).
     user_agent: str = "sisyphus/0.1 (https://github.com/leonardo-michelotti/sisyphus-api)"

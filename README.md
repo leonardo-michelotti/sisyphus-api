@@ -171,7 +171,9 @@ print(f'{selection["frase"]["texto"]} — {selection["frase"]["autor"]}')
   },
   "modo": "daily",
   "data": "2026-07-12",
-  "colecao": null
+  "colecao": null,
+  "dataset_version": "10de7c77f7180fc8",
+  "dataset_schema": 2
 }
 ```
 
@@ -189,6 +191,7 @@ O conteúdo e o autor variam conforme a data e os filtros.
 | explorar relações intelectuais | [Mapa de influências](https://sisyphus-public-production.up.railway.app/influences?thinker=Albert%20Camus) |
 | listar coleções | [`/v1/collections`](https://sisyphus-public-production.up.railway.app/v1/collections) |
 | verificar o serviço | [`/health`](https://sisyphus-public-production.up.railway.app/health) |
+| verificar o dataset local | `/health/dataset` |
 
 ## Endpoints
 
@@ -199,11 +202,12 @@ O conteúdo e o autor variam conforme a data e os filtros.
 | `GET` | `/v1/thinkers/{nome}/influences` | Influências diretas via Wikidata P737 |
 | `GET` | `/v1/search?q=` | Busca de personalidades por nome |
 | `GET` | `/v1/quotes/random` | Frase aleatória com filtros |
-| `GET` | `/v1/quote-of-the-day` | Frase diária determinística em UTC |
+| `GET` | `/v1/quote-of-the-day` | Frase diária curada e determinística em UTC |
 | `GET` | `/v1/collections` | Coleções editoriais de personalidades |
 | `GET` | `/widget` | Widget incorporável |
 | `GET` | `/influences` | Mapa visual de influências |
 | `GET` | `/health` | Estado do serviço |
+| `GET` | `/health/dataset` | Compatibilidade do SQLite, sem consultar fontes externas |
 
 Listas usam o envelope `{data, meta}`. Erros seguem RFC 9457 em
 `application/problem+json`. As respostas expõem ETag, cache HTTP, request ID e
@@ -215,7 +219,8 @@ headers de rate limit quando aplicável. A seleção aleatória usa
 ```text
 Cliente
   └─ FastAPI
-       ├─ Wikiquote → resolução de nome e frases
+       ├─ SQLite    → frase do dia curada e versão do dataset
+       ├─ Wikiquote → resolução de nome e demais frases
        ├─ Wikidata  → biografia, obras e influências P737
        └─ serviços  → seleção, filtros, atribuição e cache
             ├─ REST JSON
@@ -228,10 +233,17 @@ a essa página identifica a mesma pessoa no Wikidata, reduzindo o risco de
 combinar entidades homônimas. Biografia e frases são consultadas de forma
 concorrente, com cache interno e validação dos contratos na borda.
 
+A frase do dia é a primeira rota migrada para a base curada e usa apenas uma
+allowlist editorial revisada manualmente. Ela não retorna ao
+Wikiquote quando o SQLite está ausente ou incompatível: responde `503` e preserva
+essa falha na readiness. O widget e os demais endpoints continuam no caminho ao
+vivo até suas migrações serem avaliadas separadamente.
+
 As decisões e os limites técnicos estão registrados em
 [`docs/DECISIONS.md`](docs/DECISIONS.md),
 [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) e
-[`docs/PILARES_TECNICOS.md`](docs/PILARES_TECNICOS.md).
+[`docs/PILARES_TECNICOS.md`](docs/PILARES_TECNICOS.md) e
+[`docs/RELEASE.md`](docs/RELEASE.md).
 
 ### A base curada
 
@@ -260,17 +272,16 @@ Requer Python 3.10 ou superior.
 ```bash
 git clone https://github.com/leonardo-michelotti/sisyphus-api.git
 cd sisyphus-api
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+python -m pip install "uv==0.11.28"
+uv sync --frozen --extra dev
 cp .env.example .env
-uvicorn sisyphus.main:app --reload
+uv run uvicorn sisyphus.main:app --reload
 ```
 
 No Windows PowerShell, ative o ambiente com:
 
 ```powershell
-.venv\Scripts\Activate.ps1
+uv run uvicorn sisyphus.main:app --reload
 ```
 
 Configure no `.env` um `User-Agent` válido para as APIs Wikimedia e abra
@@ -279,14 +290,14 @@ Configure no `.env` um `User-Agent` válido para as APIs Wikimedia e abra
 ## Qualidade
 
 ```bash
-ruff format --check .
-ruff check .
-mypy
-pytest
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy src
+uv run pytest
 ```
 
-O CI executa Python 3.10 e 3.12, análise estática, tipagem estrita, testes e
-auditoria das dependências de runtime.
+O `uv.lock` fixa aplicação e ferramentas do pipeline. O CI executa Python 3.10 e
+3.12, análise estática, tipagem estrita, testes e auditoria das dependências.
 
 ## Limites atuais
 

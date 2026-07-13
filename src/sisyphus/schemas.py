@@ -71,6 +71,13 @@ class QuoteSelection(BaseModel):
     colecao: EditorialCollection | None = None
 
 
+class CuratedQuoteSelection(QuoteSelection):
+    """Seleção servida por um dataset curado e identificável."""
+
+    dataset_version: str = Field(description="Versão da base curada")
+    dataset_schema: int = Field(description="Versão do schema da base")
+
+
 class Thinker(BaseModel):
     qid: str = Field(examples=["Q34670"])
     nome: str = Field(examples=["Albert Camus"])

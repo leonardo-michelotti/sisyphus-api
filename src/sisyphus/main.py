@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -15,10 +16,11 @@ from .caching import ETagMiddleware
 from .clients.wikidata import WikidataClient
 from .clients.wikiquote import WikiquoteClient
 from .config import settings
-from .errors import register_error_handlers
+from .errors import DatasetUnavailable, register_error_handlers
 from .logging_config import setup_logging
 from .middleware import RequestIdMiddleware, SecurityHeadersMiddleware
 from .ratelimit import RateLimitMiddleware
+from .repositories.quotes import SQLiteQuoteRepository
 from .routers import health, quotes, thinkers, web
 from .schemas import ProblemDetail
 from .services.thinker_service import ThinkerService
@@ -28,10 +30,12 @@ _PROBLEM_RESPONSES: dict[int | str, dict[str, object]] = {
     404: {"model": ProblemDetail, "description": "Pensador não encontrado"},
     429: {"model": ProblemDetail, "description": "Limite de requisições excedido"},
     502: {"model": ProblemDetail, "description": "Fonte upstream indisponível"},
+    503: {"model": ProblemDetail, "description": "Base curada indisponível"},
     504: {"model": ProblemDetail, "description": "Fonte upstream expirou"},
 }
 
 setup_logging(settings.log_level, settings.log_format)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -45,6 +49,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     wikidata = WikidataClient(http, cache)
     app.state.http = http  # usado pela readiness (/health/ready)
     app.state.service = ThinkerService(wikiquote, wikidata)
+    try:
+        metadata = SQLiteQuoteRepository(settings.serving_db_path).metadata()
+        logger.info(
+            "dataset curado disponível: version=%s schema=%s run_id=%s",
+            metadata.dataset_version,
+            metadata.schema_version,
+            metadata.run_id,
+        )
+    except DatasetUnavailable:
+        logger.warning("dataset curado indisponível")
     try:
         yield
     finally:

@@ -1,0 +1,38 @@
+FROM python:3.12.13-slim@sha256:423ed6ab25b1921a477529254bfeeabf5855151dc2c3141699a1bfc852199fbf AS builder
+
+ARG UV_VERSION=0.11.28
+
+WORKDIR /app
+
+RUN python -m pip install --no-cache-dir "uv==${UV_VERSION}"
+
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+COPY src ./src
+RUN uv sync --frozen --no-dev --no-editable
+
+FROM python:3.12.13-slim@sha256:423ed6ab25b1921a477529254bfeeabf5855151dc2c3141699a1bfc852199fbf AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8000 \
+    SISYPHUS_SERVING_DB_PATH=/app/data/sisyphus.db \
+    PATH=/app/.venv/bin:$PATH
+
+WORKDIR /app
+
+COPY --from=builder /app/.venv /app/.venv
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/data \
+    && chown -R appuser:appuser /app
+
+COPY --chown=appuser:appuser data/sisyphus.db /app/data/sisyphus.db
+RUN chmod 0444 /app/data/sisyphus.db
+
+USER appuser
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/dataset', timeout=3).read()"]
+
+CMD ["sh", "-c", "uvicorn sisyphus.main:app --host 0.0.0.0 --port ${PORT}"]

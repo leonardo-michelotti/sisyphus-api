@@ -43,6 +43,10 @@ models:
         tests: [not_null]
       - name: quality_reasons
         tests: [not_null]
+      - name: editorial_approved
+        tests: [not_null]
+      - name: is_daily_eligible
+        tests: [not_null]
       - name: thinker_qid
         tests:
           - relationships:
@@ -54,3 +58,12 @@ models:
           - accepted_values:
               arguments:
                 values: [accepted, review, rejected]
+
+seeds:
+  - name: daily_quote_selection
+    description: Allowlist editorial mínima para a frase do dia.
+    columns:
+      - name: quote_id
+        tests: [not_null, unique]
+      - name: thinker_qid
+        tests: [not_null, unique]

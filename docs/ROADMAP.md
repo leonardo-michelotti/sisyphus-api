@@ -58,6 +58,10 @@ O brilho visível, baixo esforço.
 - README repaginado: hero, badges, diagrama de arquitetura, gif da demo, links vivos.
 - ADRs: 026.
 
+**Estado:** a rota de frase do dia possui implementação sobre o SQLite curado,
+com versão do dataset e falha explícita. A distribuição do arquivo no ambiente de
+produção permanece pendente e deve ser resolvida antes do deploy dessa mudança.
+
 ### Fase 2 · Grafo de influências
 Usa a natureza-grafo do Wikidata que já consultamos.
 - `GET /v1/thinkers/{nome}/influences` — Wikidata **P737** (influenciado por).

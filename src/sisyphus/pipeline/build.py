@@ -20,6 +20,7 @@ import httpx
 from sisyphus.catalog import ALL_THINKERS
 from sisyphus.clients.wikiquote import _page_url, parse_quotes
 from sisyphus.config import settings
+from sisyphus.dataset import SERVING_SCHEMA_VERSION
 
 ROOT = Path(__file__).resolve().parents[3]
 DATA = ROOT / "data"
@@ -28,6 +29,7 @@ WAREHOUSE = DATA / "sisyphus.duckdb"
 SERVING = DATA / "sisyphus.db"
 REPORT = ROOT / "reports" / "data-quality.html"
 PARSER_VERSION = "1"
+PIPELINE_VERSION = "2"
 MAX_FETCH_ATTEMPTS = 3
 MAX_CONCURRENT_FETCHES = 4
 TRANSIENT_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
@@ -173,7 +175,7 @@ def _write_manifest(
     status: str,
     sources: list[dict[str, Any]],
     error: str | None = None,
-) -> None:
+) -> str:
     payload: dict[str, Any] = {
         "run_id": run_id,
         "status": status,
@@ -182,9 +184,33 @@ def _write_manifest(
     }
     if error:
         payload["error"] = error
-    (run_dir / "manifest.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8"
-    )
+    content = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
+    (run_dir / "manifest.json").write_bytes(content)
+    return hashlib.sha256(content).hexdigest()
+
+
+def _record_build_provenance(
+    warehouse: Path,
+    *,
+    run_id: str,
+    manifest_sha256: str,
+) -> None:
+    if len(manifest_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in manifest_sha256
+    ):
+        raise ValueError("manifest_sha256 deve ser um SHA-256 hexadecimal")
+    source_commit = os.environ.get("SISYPHUS_SOURCE_COMMIT", "local").strip() or "local"
+    with duckdb.connect(str(warehouse)) as connection:
+        connection.execute("drop table if exists pipeline_build_metadata")
+        connection.execute(
+            """create table pipeline_build_metadata as select
+               ?::varchar run_id,
+               ?::varchar manifest_sha256,
+               ?::varchar pipeline_version,
+               ?::varchar parser_version,
+               ?::varchar source_commit""",
+            [run_id, manifest_sha256, PIPELINE_VERSION, PARSER_VERSION, source_commit],
+        )
 
 
 async def ingest(
@@ -229,12 +255,19 @@ async def ingest(
         if len(snapshots) != len(ALL_THINKERS):
             raise RuntimeError("uma ou mais fontes falharam; o warehouse não foi atualizado")
         _load_bronze(snapshots, warehouse=warehouse, bronze_dir=run_dir)
+        manifest_sha256 = _write_manifest(
+            run_dir, run_id=run_id, status="complete", sources=sources
+        )
+        _record_build_provenance(
+            warehouse,
+            run_id=run_id,
+            manifest_sha256=manifest_sha256,
+        )
     except Exception as exc:
         _write_manifest(
             run_dir, run_id=run_id, status="failed", sources=sources, error=type(exc).__name__
         )
         raise
-    _write_manifest(run_dir, run_id=run_id, status="complete", sources=sources)
     return list(snapshots)
 
 
@@ -304,6 +337,7 @@ def _load_bronze(
             f"copy bronze_thinkers to '{(bronze_dir / 'thinkers.parquet').as_posix()}' "
             "(format parquet, compression zstd)"
         )
+        con.execute("drop table if exists pipeline_build_metadata")
 
 
 def transform(*, warehouse: Path = WAREHOUSE) -> None:
@@ -315,6 +349,24 @@ def transform(*, warehouse: Path = WAREHOUSE) -> None:
         env=env,
         check=True,
     )
+
+
+def _dataset_version(
+    thinkers: list[tuple[Any, ...]],
+    quotes: list[tuple[Any, ...]],
+) -> str:
+    digest = hashlib.sha256(f"schema:{SERVING_SCHEMA_VERSION}\n".encode())
+    for label, rows in (("thinker", thinkers), ("quote", quotes)):
+        for row in rows:
+            payload = json.dumps(
+                [label, *row],
+                ensure_ascii=False,
+                separators=(",", ":"),
+                default=str,
+            )
+            digest.update(payload.encode("utf-8"))
+            digest.update(b"\n")
+    return digest.hexdigest()[:16]
 
 
 def publish(
@@ -345,8 +397,38 @@ def publish(
                 ).fetchone()
                 if eligible is None or eligible[0] < 1:
                     raise RuntimeError("publicação bloqueada: nenhuma frase elegível")
+                eligible_thinkers = {
+                    row[0]
+                    for row in source.execute(
+                        """select distinct thinker_name from fct_quotes
+                           where is_daily_eligible"""
+                    ).fetchall()
+                }
+                without_daily_quote = set(expected_thinkers) - eligible_thinkers
+                if without_daily_quote:
+                    names = ", ".join(sorted(without_daily_quote))
+                    raise RuntimeError(
+                        f"publicação bloqueada: pensadores sem frase elegível: {names}"
+                    )
+                provenance = source.execute(
+                    """select run_id, manifest_sha256, pipeline_version,
+                              parser_version, source_commit
+                       from pipeline_build_metadata"""
+                ).fetchone()
+                if provenance is None:
+                    raise RuntimeError("publicação bloqueada: proveniência da execução ausente")
                 out.executescript(
-                    """create table thinkers (
+                    """create table build_metadata (
+                        schema_version integer not null,
+                        dataset_version text not null,
+                        source_fetched_at text not null,
+                        pipeline_version text not null,
+                        parser_version text not null,
+                        run_id text not null,
+                        manifest_sha256 text not null,
+                        source_commit text not null
+                    );
+                    create table thinkers (
                         thinker_qid text primary key,
                         thinker_name text not null,
                         wikiquote_title text not null,
@@ -389,6 +471,25 @@ def publish(
                               to_json(quality_reasons), cast(is_daily_eligible as integer)
                        from fct_quotes order by thinker_qid, occurrence_id"""
                 ).fetchall()
+                source_fetched_at = source.execute(
+                    "select cast(max(fetched_at) as varchar) from dim_thinkers"
+                ).fetchone()
+                assert source_fetched_at is not None and source_fetched_at[0] is not None
+                fingerprint_thinkers = [tuple(row[:5]) for row in thinkers]
+                dataset_version = _dataset_version(fingerprint_thinkers, quotes)
+                out.execute(
+                    "insert into build_metadata values (?, ?, ?, ?, ?, ?, ?, ?)",
+                    [
+                        SERVING_SCHEMA_VERSION,
+                        dataset_version,
+                        source_fetched_at[0],
+                        provenance[2],
+                        provenance[3],
+                        provenance[0],
+                        provenance[1],
+                        provenance[4],
+                    ],
+                )
                 out.executemany(
                     "insert into quotes values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     quotes,
