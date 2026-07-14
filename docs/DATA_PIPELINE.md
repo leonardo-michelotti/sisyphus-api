@@ -128,8 +128,9 @@ o lock completo de dependências são.
 A aplicação procura `data/sisyphus.db` por padrão. Outro caminho pode ser informado
 em `SISYPHUS_SERVING_DB_PATH`. `Dockerfile.release` cria uma imagem mínima com o
 SQLite validado e mantém bronze, DuckDB e dbt fora do runtime. O Dockerfile atual
-continua independente para não interromper o serviço que ainda consulta as fontes
-ao vivo.
+permanece como caminho de desenvolvimento e legado. Em produção, a frase do dia já
+é servida pela imagem curada; os demais endpoints continuam consultando as fontes
+ao vivo durante a migração gradual.
 
 O workflow manual `release-image.yml` reconstrói a base, repete a validação, testa a
 imagem como usuário sem privilégios e só publica no GHCR quando `publish_image` é
