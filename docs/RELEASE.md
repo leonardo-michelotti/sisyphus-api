@@ -1,14 +1,14 @@
 # Publicação da base curada
 
 Este procedimento descreve como transformar uma execução validada do pipeline em
-uma imagem de runtime identificável. Ele não autoriza merge, mudança de visibilidade
-do pacote ou deploy no Railway.
+uma imagem de runtime identificável e promovê-la com segurança. Cada nova publicação
+ou alteração no Railway continua dependendo de autorização explícita.
 
 ## Separação entre build e runtime
 
-`Dockerfile` continua atendendo o serviço atual, construído pelo Railway a partir do
-repositório. `Dockerfile.release` é usado somente depois que o pipeline gera
-`data/sisyphus.db`.
+`Dockerfile.release` é usado depois que o pipeline gera `data/sisyphus.db`. Produção
+consome essa imagem pronta, sem reconstruir o código ou a base no Railway. O
+`Dockerfile` original permanece apenas como caminho de desenvolvimento e legado.
 
 A imagem de release contém:
 
@@ -60,17 +60,16 @@ autorização explícita. O workflow usa `GITHUB_TOKEN`, permissões mínimas e 
 fixadas por SHA. Ele publica uma única tag imutável e sua atestação. Não cria
 `latest` e não aciona o Railway.
 
-Pacotes novos de contas pessoais começam privados. Tornar o pacote público permite
-pull anônimo, mas essa mudança não pode ser revertida no GitHub. Se o pacote ficar
-privado, o Railway exige suporte do plano a registros privados e uma credencial com
-somente `read:packages`.
+O pacote atual é público e pode ser consumido anonimamente pelo Railway no plano
+Hobby. Pacotes privados exigem suporte do plano a registros privados e uma
+credencial com somente `read:packages`.
 
 ## Entrada segura no Railway
 
 Fazer o primeiro teste em um serviço temporário, sem substituir o serviço público:
 
 1. apontar o serviço temporário para a tag imutável;
-2. configurar `/health/dataset` como healthcheck;
+2. configurar `/health/dataset` em **Deploy > Healthcheck Path**;
 3. validar `/health`, `/health/dataset`, `/v1/quote-of-the-day` e o OpenAPI;
 4. comparar `dataset_version` com o resumo do workflow;
 5. simular retorno à imagem anterior;
@@ -78,6 +77,10 @@ Fazer o primeiro teste em um serviço temporário, sem substituir o serviço pú
 
 Somente depois desse ensaio o serviço público pode ser alterado. Atualização
 automática por tag mutável permanece desabilitada.
+
+O `HEALTHCHECK` do `Dockerfile.release` protege a execução do container, mas não
+substitui o Healthcheck Path do Railway. É essa configuração da plataforma que
+impede a troca de tráfego até `/health/dataset` responder HTTP 200.
 
 ## Rollback
 
@@ -101,5 +104,5 @@ Se o rollback da plataforma não estiver mais disponível:
 - commit, manifesto ou metadados divergem;
 - imagem executa como root;
 - bronze ou DuckDB aparecem no runtime;
-- visibilidade do GHCR ou plano do Railway ainda não foram decididos;
+- a tag não é imutável ou o Railway não consegue acessar o pacote;
 - não existe autorização explícita para publicar ou implantar.
