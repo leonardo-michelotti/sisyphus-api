@@ -81,21 +81,27 @@ def client() -> TestClient:
     return TestClient(app)
 
 
-def test_lists_five_editorial_collections() -> None:
+def test_lists_ten_editorial_collections() -> None:
     response = client().get("/v1/collections")
 
     assert response.status_code == 200
-    assert response.json()["meta"]["total"] == 5
+    assert response.json()["meta"]["total"] == 10
 
 
 def test_home_explains_product_and_integrations() -> None:
     response = client().get("/")
 
     assert response.status_code == 200
-    assert "Três superfícies" in response.text
+    assert "Uma frase para atravessar o dia" in response.text
+    assert "Diária ou aleatória" in response.text
     assert "Notion" in response.text
     assert "Obsidian" in response.text
-    assert "Explorar mapa" in response.text
+    assert "Só isso: uma frase, sua fonte e uma URL" in response.text
+    assert "SEU-DOMINIO" not in response.text
+    assert "pronto para crescer" not in response.text
+    assert "deployment" not in response.text
+    assert 'id="max-length"' in response.text
+    assert 'id="copy-status" role="status" aria-live="polite"' in response.text
     assert 'aria-label="Navegação principal"' in response.text
 
 
@@ -145,7 +151,7 @@ def test_unknown_collection_uses_problem_details() -> None:
 
 
 def test_widget_escapes_quote_and_can_be_embedded() -> None:
-    response = client().get("/widget", params={"thinker": "Albert Camus"})
+    response = client().get("/widget", params={"thinker": "Albert Camus", "mode": "random"})
 
     assert response.status_code == 200
     assert "Pensar &lt;com cuidado&gt;" in response.text
@@ -155,10 +161,50 @@ def test_widget_escapes_quote_and_can_be_embedded() -> None:
     assert response.headers["x-content-type-options"] == "nosniff"
 
 
+def test_daily_widget_uses_curated_repository() -> None:
+    response = client().get("/widget", params={"thinker": "Albert Camus"})
+
+    assert response.status_code == 200
+    assert "A liberdade é uma oportunidade de ser melhor." in response.text
+    assert "Pensar &lt;com cuidado&gt;" not in response.text
+    assert response.headers["cache-control"] == "public, max-age=3600"
+
+
+def test_widget_accepts_length_filter() -> None:
+    response = client().get(
+        "/widget",
+        params={"thinker": "Albert Camus", "max_length": 80, "mode": "random"},
+    )
+
+    assert response.status_code == 200
+    assert "Pensar &lt;com cuidado&gt;" in response.text
+
+
+def test_widget_rejects_invalid_length_filter() -> None:
+    response = client().get("/widget", params={"max_length": 39})
+
+    assert response.status_code == 422
+
+
+def test_widget_can_hide_context() -> None:
+    response = client().get(
+        "/widget",
+        params={"thinker": "Albert Camus", "mode": "random", "show_context": "false"},
+    )
+
+    assert response.status_code == 200
+    assert "class='context'" not in response.text
+    assert "Fonte:" in response.text
+
+
 def test_influence_page_explains_provenance_and_renders_nodes() -> None:
     response = client().get("/influences", params={"thinker": "Albert Camus"})
 
     assert response.status_code == 200
     assert "Jean-Paul Sartre" in response.text
+    assert "/influences?thinker=Jean-Paul+Sartre" in response.text
+    assert "Registros diretos" in response.text
+    assert "Nenhuma ideia chega sozinha" in response.text
+    assert 'list="thinker-list"' in response.text
     assert "relações P737" in response.text
     assert "frame-ancestors 'self'" in response.headers["content-security-policy"]

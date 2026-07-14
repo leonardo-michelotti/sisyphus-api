@@ -2,52 +2,60 @@
 
 # Sisyphus
 
-Frases com contexto, fonte identificada e uma URL pronta para incorporar.
+Uma frase, sua fonte e uma URL.
 
 [![CI](https://github.com/leonardo-michelotti/sisyphus-api/actions/workflows/ci.yml/badge.svg)](https://github.com/leonardo-michelotti/sisyphus-api/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB)](https://www.python.org/)
 [![License MIT](https://img.shields.io/badge/License-MIT-D4A85A)](LICENSE)
 
-[Abrir o gerador](https://sisyphus-public-production.up.railway.app/) ·
+[Gerar um widget](https://sisyphus-public-production.up.railway.app/) ·
 [Explorar a API](https://sisyphus-public-production.up.railway.app/docs) ·
 [Ver influências](https://sisyphus-public-production.up.railway.app/influences?thinker=Albert%20Camus)
 
 </div>
 
-> Uma frase melhor escolhida, apresentada com contexto e pronta para ocupar seu
-> espaço digital.
+Eu queria deixar uma frase por perto: numa nota, numa página, talvez ao lado do
+café. Sem uma lista de citações soltas e sem esconder de onde o texto veio. O
+Sisyphus nasceu daí.
 
-O Sisyphus combina Wikiquote e Wikidata para entregar frases de filósofos,
-sociólogos, escritores e cientistas. O mesmo núcleo alimenta um widget para uso
-sem código, uma API REST versionada e um mapa de influências intelectuais.
+Ele faz três coisas:
 
-## Comece em 30 segundos
+- escolhe uma frase diária revisada;
+- oferece uma seleção aleatória para explorar;
+- entrega tudo como widget ou JSON.
 
-Escolha uma coleção no [gerador](https://sisyphus-public-production.up.railway.app/),
-defina o ritmo e copie o link. Esta URL, por exemplo, exibe uma frase diária da
-coleção Existência e absurdo:
+No ar: <https://sisyphus-public-production.up.railway.app>
+
+## Experimente primeiro
+
+Esta URL mostra uma frase diária da coleção **Existência e absurdo**:
 
 ```text
 https://sisyphus-public-production.up.railway.app/widget?collection=existencia-e-absurdo&mode=daily
 ```
 
-A frase diária permanece estável durante a data UTC. Para receber uma nova
-seleção a cada carregamento, troque `mode=daily` por `mode=random`.
+Para receber outra seleção a cada carregamento, use `mode=random`. Também é
+possível filtrar por pensador:
 
-## Use onde você já trabalha
+```text
+https://sisyphus-public-production.up.railway.app/widget?thinker=Hannah%20Arendt&mode=daily&show_context=true
+```
+
+O [gerador visual](https://sisyphus-public-production.up.railway.app/) monta a URL
+sem que seja necessário editar os parâmetros manualmente.
+
+## Incorporar o widget
 
 ### Notion
 
-1. No Notion, digite `/embed` e escolha **Embed**.
-2. Cole a URL gerada pelo Sisyphus.
-3. Confirme a incorporação e ajuste a altura do bloco.
+1. Digite `/embed` e escolha **Embed**.
+2. Cole a URL produzida pelo gerador.
+3. Confirme e ajuste a altura do bloco.
 
-Use `mode=daily` para dashboards, páginas iniciais e diários. O conteúdo muda
+O modo `daily` funciona bem em páginas iniciais e diários porque o conteúdo muda
 uma vez por dia sem exigir automação no workspace.
 
-### Obsidian
-
-Adicione um `iframe` à nota e abra o modo de leitura:
+### Obsidian, sites e blogs
 
 ```html
 <iframe
@@ -56,52 +64,22 @@ Adicione um `iframe` à nota e abra o modo de leitura:
   height="320"
   title="Frase do dia"
   loading="lazy"
-></iframe>
-```
-
-O conteúdo continua vindo do serviço; a nota guarda apenas a configuração do
-widget. Para uma nota fixa, copie o texto retornado pela API em vez de usar o
-`iframe`.
-
-### Sites, blogs e dashboards
-
-O widget não exige JavaScript nem dependências no front-end:
-
-```html
-<iframe
-  src="https://sisyphus-public-production.up.railway.app/widget?thinker=Hannah%20Arendt&mode=daily&show_context=true"
-  width="100%"
-  height="320"
-  title="Frase de Hannah Arendt"
-  loading="lazy"
   style="border: 0"
 ></iframe>
 ```
 
-| Parâmetro | Valores | Função |
+No Obsidian, o `iframe` aparece no modo de leitura. A nota guarda apenas a
+configuração; o conteúdo continua sendo servido pelo Sisyphus.
+
+| Parâmetro | Valores | Efeito |
 |---|---|---|
 | `collection` | slug de uma coleção | Restringe a seleção ao recorte editorial |
-| `thinker` | nome de uma personalidade | Seleciona frases de uma pessoa |
-| `mode` | `daily` ou `random` | Define o ritmo de atualização |
-| `show_context` | `true` ou `false` | Exibe categoria, obra e coleção |
+| `thinker` | nome de uma personalidade | Seleciona uma pessoa |
+| `mode` | `daily` ou `random` | Define quando a frase muda |
+| `show_context` | `true` ou `false` | Exibe obra, categoria e coleção |
+| `max_length` | de 40 a 1000 | Limita o tamanho da frase |
 
-## Coleções disponíveis
-
-As coleções organizam personalidades por recortes editoriais. As frases ainda
-são obtidas dinamicamente das fontes Wikimedia.
-
-| Coleção | Slug | Recorte |
-|---|---|---|
-| Existência e absurdo | `existencia-e-absurdo` | Liberdade, sentido e experiência de existir |
-| Ciência e curiosidade | `ciencia-e-curiosidade` | Investigação, descoberta e limites do conhecimento |
-| Liberdade e responsabilidade | `liberdade-e-responsabilidade` | Escolha, ação política e responsabilidade |
-| Sociedade e poder | `sociedade-e-poder` | Estruturas sociais, autoridade e transformação |
-| Conhecimento e dúvida | `conhecimento-e-duvida` | Razão, método, incerteza e pensamento crítico |
-
-O catálogo completo, incluindo as personalidades de cada coleção, está em
-[`GET /v1/collections`](https://sisyphus-public-production.up.railway.app/v1/collections).
-
-## Use como API
+## Usar como API
 
 URL base:
 
@@ -153,7 +131,7 @@ print(f'{selection["frase"]["texto"]} — {selection["frase"]["autor"]}')
 ```
 
 <details>
-<summary>Exemplo de resposta</summary>
+<summary>Formato da resposta</summary>
 
 ```json
 {
@@ -170,100 +148,92 @@ print(f'{selection["frase"]["texto"]} — {selection["frase"]["autor"]}')
     }
   },
   "modo": "daily",
-  "data": "2026-07-12",
+  "data": "AAAA-MM-DD",
   "colecao": null,
-  "dataset_version": "10de7c77f7180fc8",
+  "dataset_version": "hash-do-dataset",
   "dataset_schema": 2
 }
 ```
 
-O conteúdo e o autor variam conforme a data e os filtros.
-
 </details>
 
-## Recursos
+Listas usam o envelope `{data, meta}`. Erros seguem RFC 9457 em
+`application/problem+json`. As respostas incluem ETag, cache HTTP, request ID e
+limites de requisição quando aplicável. A seleção aleatória usa
+`Cache-Control: no-store`.
 
-| Quero... | Caminho |
-|---|---|
-| configurar um widget | [Gerador visual](https://sisyphus-public-production.up.railway.app/) |
-| testar os contratos | [Swagger](https://sisyphus-public-production.up.railway.app/docs) |
-| consultar o OpenAPI | [`/openapi.json`](https://sisyphus-public-production.up.railway.app/openapi.json) |
-| explorar relações intelectuais | [Mapa de influências](https://sisyphus-public-production.up.railway.app/influences?thinker=Albert%20Camus) |
-| listar coleções | [`/v1/collections`](https://sisyphus-public-production.up.railway.app/v1/collections) |
-| verificar o serviço | [`/health`](https://sisyphus-public-production.up.railway.app/health) |
-| verificar o dataset local | `/health/dataset` |
-
-## Endpoints
+### Endpoints principais
 
 | Método | Rota | Retorna |
 |---|---|---|
+| `GET` | `/v1/quote-of-the-day` | Frase diária curada e determinística |
+| `GET` | `/v1/quotes/random` | Frase aleatória com filtros |
+| `GET` | `/v1/collections` | Coleções editoriais |
+| `GET` | `/v1/search?q=` | Busca de personalidades |
 | `GET` | `/v1/thinkers/{nome}` | Perfil, obras e amostra de frases |
 | `GET` | `/v1/thinkers/{nome}/quotes` | Frases paginadas |
 | `GET` | `/v1/thinkers/{nome}/influences` | Influências diretas via Wikidata P737 |
-| `GET` | `/v1/search?q=` | Busca de personalidades por nome |
-| `GET` | `/v1/quotes/random` | Frase aleatória com filtros |
-| `GET` | `/v1/quote-of-the-day` | Frase diária curada e determinística em UTC |
-| `GET` | `/v1/collections` | Coleções editoriais de personalidades |
-| `GET` | `/widget` | Widget incorporável |
-| `GET` | `/influences` | Mapa visual de influências |
-| `GET` | `/health` | Estado do serviço |
-| `GET` | `/health/dataset` | Compatibilidade do SQLite, sem consultar fontes externas |
+| `GET` | `/health` | Estado do processo |
+| `GET` | `/health/dataset` | Integridade e versão da base curada |
 
-Listas usam o envelope `{data, meta}`. Erros seguem RFC 9457 em
-`application/problem+json`. As respostas expõem ETag, cache HTTP, request ID e
-headers de rate limit quando aplicável. A seleção aleatória usa
-`Cache-Control: no-store`.
+O contrato completo está no [Swagger](https://sisyphus-public-production.up.railway.app/docs)
+e em [`/openapi.json`](https://sisyphus-public-production.up.railway.app/openapi.json).
 
-## Como funciona
+## Coleções editoriais
 
-```text
-Cliente
-  └─ FastAPI
-       ├─ SQLite    → frase do dia curada e versão do dataset
-       ├─ Wikiquote → resolução de nome e demais frases
-       ├─ Wikidata  → biografia, obras e influências P737
-       └─ serviços  → seleção, filtros, atribuição e cache
-            ├─ REST JSON
-            ├─ widget HTML
-            └─ mapa de influências
-```
+| Coleção | Slug | Recorte |
+|---|---|---|
+| Existência e absurdo | `existencia-e-absurdo` | Liberdade, sentido e experiência de existir |
+| Ciência e curiosidade | `ciencia-e-curiosidade` | Investigação, descoberta e limites do conhecimento |
+| Liberdade e responsabilidade | `liberdade-e-responsabilidade` | Escolha, ação política e responsabilidade |
+| Sociedade e poder | `sociedade-e-poder` | Estruturas sociais, autoridade e transformação |
+| Conhecimento e dúvida | `conhecimento-e-duvida` | Razão, método, incerteza e pensamento crítico |
+| Trabalho e vocação | `trabalho-e-vocacao` | Trabalho, ação e vida pública |
+| Revolta e resistência | `revolta-e-resistencia` | Recusa, coragem e transformação |
+| Método e descoberta | `metodo-e-descoberta` | Dúvida, experimento e conhecimento |
+| Universo e humanidade | `universo-e-humanidade` | Cosmos, ciência e lugar humano |
+| Indivíduo e liberdade | `individuo-e-liberdade` | Autonomia, escolha e convivência |
 
-O nome informado é resolvido primeiro pela página do Wikiquote. O QID associado
-a essa página identifica a mesma pessoa no Wikidata, reduzindo o risco de
-combinar entidades homônimas. Biografia e frases são consultadas de forma
-concorrente, com cache interno e validação dos contratos na borda.
+O catálogo completo, com as personalidades de cada coleção, está em
+[`GET /v1/collections`](https://sisyphus-public-production.up.railway.app/v1/collections).
 
-A frase do dia é a primeira rota migrada para a base curada e usa apenas uma
-allowlist editorial revisada manualmente. Ela não retorna ao
-Wikiquote quando o SQLite está ausente ou incompatível: responde `503` e preserva
-essa falha na readiness. O widget e os demais endpoints continuam no caminho ao
-vivo até suas migrações serem avaliadas separadamente.
+## Por dentro
 
-As decisões e os limites técnicos estão registrados em
-[`docs/DECISIONS.md`](docs/DECISIONS.md),
-[`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) e
-[`docs/PILARES_TECNICOS.md`](docs/PILARES_TECNICOS.md) e
-[`docs/RELEASE.md`](docs/RELEASE.md).
-
-### A base curada
-
-A consulta ao vivo continua sendo a borda do produto. Em paralelo, um pipeline
-reproduzível preserva snapshots das fontes, normaliza as frases e separa conteúdo
-coletado de conteúdo pronto para destaque.
+O Sisyphus é uma API somente leitura. Um pipeline separado coleta e organiza o
+conteúdo; a aplicação recebe um SQLite já revisado para servir a frase do dia.
 
 ```text
 Wikiquote + Wikidata
-  └─ Python + HTTPX
-       └─ bronze: JSON e Parquet
-            └─ dbt-duckdb: silver e gold com testes
-                 ├─ SQLite + FTS5 para a API
-                 └─ relatório de auditoria
+        │
+        ▼
+Python + HTTPX
+        │
+        ▼
+bronze: JSON + Parquet
+        │
+        ▼
+dbt-duckdb: silver + gold + testes
+        │
+        ▼
+SQLite + FTS5 + metadados de versão
+        │
+        ▼
+FastAPI ──────► REST JSON
+        ├─────► widget HTML
+        └─────► mapa de influências
 ```
 
-O runner `run_pipeline.py` encadeia ingestão, transformação, publicação e
-auditoria. As regras não apagam casos duvidosos: elas registram se cada frase foi
-aceita, enviada para revisão ou rejeitada, sempre com o motivo. A implementação e
-as decisões estão em [`docs/DATA_PIPELINE.md`](docs/DATA_PIPELINE.md).
+O runner `run_pipeline.py` encadeia coleta, transformação, publicação e auditoria.
+Casos duvidosos ficam separados para revisão. A frase diária usa apenas o recorte
+aprovado e não troca silenciosamente para a fonte ao vivo.
+
+Detalhes:
+
+- [arquitetura](docs/ARQUITETURA.md);
+- [pipeline de dados](docs/DATA_PIPELINE.md);
+- [decisões técnicas](docs/DECISIONS.md);
+- [processo de release](docs/RELEASE.md);
+- [visão e roadmap](docs/PRODUCT_VISION.md).
 
 ## Desenvolvimento local
 
@@ -278,16 +248,10 @@ cp .env.example .env
 uv run uvicorn sisyphus.main:app --reload
 ```
 
-No Windows PowerShell, ative o ambiente com:
-
-```powershell
-uv run uvicorn sisyphus.main:app --reload
-```
-
 Configure no `.env` um `User-Agent` válido para as APIs Wikimedia e abra
 `http://localhost:8000/docs`.
 
-## Qualidade
+### Qualidade
 
 ```bash
 uv run ruff format --check .
@@ -296,21 +260,24 @@ uv run mypy src
 uv run pytest
 ```
 
-O `uv.lock` fixa aplicação e ferramentas do pipeline. O CI executa Python 3.10 e
-3.12, análise estática, tipagem estrita, testes e auditoria das dependências.
+O `uv.lock` fixa a aplicação e as ferramentas do pipeline. O CI cobre Python 3.10
+e 3.12, formatação, análise estática, tipagem, testes e auditoria de dependências.
 
-## Limites atuais
+## O que ele não tenta ser
 
-- As frases dependem da estrutura e da disponibilidade do Wikiquote em português.
-- O mapa mostra apenas relações P737 declaradas, não toda a história intelectual.
-- As coleções curam grupos de personalidades, ainda não cada frase individual.
-- O produto é somente leitura e não possui contas ou painel administrativo.
+- Frase aleatória, busca, perfis e influências ainda dependem da disponibilidade e
+  da estrutura das fontes Wikimedia.
+- O mapa mostra relações P737 declaradas no Wikidata, não uma história intelectual
+  completa.
+- A curadoria individual está aplicada à frase do dia; as demais rotas continuam
+  no caminho ao vivo.
+- Não há contas, feed social ou painel administrativo.
 
-Os próximos experimentos e seus critérios de priorização estão no
+É uma solução simples, e deve continuar parecendo uma. Os próximos ajustes estão no
 [roadmap](docs/ROADMAP.md).
 
 ## Fontes e licença
 
-O conteúdo do Wikiquote é atribuído sob CC BY-SA e o Wikidata usa CC0. Cada
-resposta preserva a fonte correspondente. O código do Sisyphus é distribuído
-sob a licença MIT.
+O conteúdo do Wikiquote é atribuído sob CC BY-SA, enquanto o Wikidata usa CC0.
+Cada resposta preserva sua fonte. O código do Sisyphus é distribuído sob a
+[licença MIT](LICENSE).

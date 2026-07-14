@@ -45,6 +45,41 @@ _COLLECTIONS = (
         descricao="Razão, método, incerteza e pensamento crítico.",
         pensadores=["Sócrates", "René Descartes", "Bertrand Russell", "Karl Popper"],
     ),
+    EditorialCollection(
+        slug="trabalho-e-vocacao",
+        titulo="Trabalho e vocação",
+        descricao="Trabalho, ação e os sentidos da vida pública.",
+        pensadores=["Karl Marx", "Max Weber", "Hannah Arendt", "Simone de Beauvoir"],
+    ),
+    EditorialCollection(
+        slug="revolta-e-resistencia",
+        titulo="Revolta e resistência",
+        descricao="Recusa, coragem e transformação do mundo comum.",
+        pensadores=["Albert Camus", "Nelson Mandela", "Hannah Arendt", "Simone de Beauvoir"],
+    ),
+    EditorialCollection(
+        slug="metodo-e-descoberta",
+        titulo="Método e descoberta",
+        descricao="Dúvida, experimento e construção do conhecimento.",
+        pensadores=["René Descartes", "Karl Popper", "Marie Curie", "Richard Feynman"],
+    ),
+    EditorialCollection(
+        slug="universo-e-humanidade",
+        titulo="Universo e humanidade",
+        descricao="Cosmos, ciência e o lugar humano no desconhecido.",
+        pensadores=["Carl Sagan", "Albert Einstein", "Richard Feynman", "Bertrand Russell"],
+    ),
+    EditorialCollection(
+        slug="individuo-e-liberdade",
+        titulo="Indivíduo e liberdade",
+        descricao="Autonomia, escolha e convivência com o outro.",
+        pensadores=[
+            "John Stuart Mill",
+            "Friedrich Nietzsche",
+            "Jean-Paul Sartre",
+            "Nelson Mandela",
+        ],
+    ),
 )
 
 COLLECTIONS: dict[str, EditorialCollection] = {item.slug: item for item in _COLLECTIONS}
