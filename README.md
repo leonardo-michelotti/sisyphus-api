@@ -9,6 +9,7 @@ Uma frase, sua fonte e uma URL.
 [![License MIT](https://img.shields.io/badge/License-MIT-D4A85A)](LICENSE)
 
 [Gerar um widget](https://sisyphus-public-production.up.railway.app/) ·
+[Explorar coleções](https://sisyphus-public-production.up.railway.app/collections) ·
 [Explorar a API](https://sisyphus-public-production.up.railway.app/docs) ·
 [Ver influências](https://sisyphus-public-production.up.railway.app/influences?thinker=Albert%20Camus)
 
@@ -258,10 +259,13 @@ uv run ruff format --check .
 uv run ruff check .
 uv run mypy src
 uv run pytest
+uv run sisyphus-audit --format markdown
 ```
 
 O `uv.lock` fixa a aplicação e as ferramentas do pipeline. O CI cobre Python 3.10
 e 3.12, formatação, análise estática, tipagem, testes e auditoria de dependências.
+O relatório atual de cobertura está em
+[`docs/COLLECTION_AUDIT.md`](docs/COLLECTION_AUDIT.md).
 
 ## O que ele não tenta ser
 

@@ -1,9 +1,10 @@
 # Roadmap — de esqueleto a vitrine
 
-**Objetivo desta fase do projeto:** o esqueleto está tecnicamente limpo, mas
-_genérico_ — hoje é um proxy fino sobre Wikiquote/Wikidata e não chamaria atenção
-num GitHub. Este documento registra a **tese de produto** que dá brilho ao
-sisyphus e a **sequência de execução** decidida (2026-07-05).
+**Objetivo atual:** validar o uso das coleções e do widget antes de ampliar o
+corpus ou adicionar uma nova camada técnica. O diagnóstico inicial de que o projeto
+era apenas um proxy já foi superado pela base curada, pela vitrine e pela publicação.
+Este documento preserva a **tese de produto** e a **sequência de execução** decidida
+em 2026-07-05.
 
 Ler junto com `PRODUCT_VISION.md` (o quê/por quê) e `DECISIONS.md` (ADRs).
 
@@ -19,8 +20,8 @@ parar o scroll não é o código limpo (ninguém audita na primeira olhada) e si
 
 ## Dois eixos de melhoria
 
-**Eixo A — maturidade de engenharia** (separa "aluno" de "senior"). Padrões 2026
-mapeados contra o estado atual:
+**Eixo A — maturidade de engenharia**. A tabela registra o ponto de partida
+mapeado em 2026-07-05; os itens foram concluídos na Fase 0:
 
 | Padrão | Estado hoje | Ação | Fonte |
 |---|---|---|---|
@@ -51,6 +52,9 @@ Deixar a API atual nível-senior e **no ar**.
 - **Deploy no Railway** com Swagger público.
 - ADRs: 011, 012, 013, 014 (já propostos) + 019–022 (novos).
 
+**Estado:** concluída. A API está versionada, observável, testada e publicada com
+cache, limites explícitos, respostas RFC 9457 e runtime sem privilégios.
+
 ### Fase 1 · Vitrine viva
 O brilho visível, baixo esforço.
 - `GET /v1/quote-of-the-day` — determinístico por data (seed curado).
@@ -58,9 +62,9 @@ O brilho visível, baixo esforço.
 - README repaginado: hero, badges, diagrama de arquitetura, gif da demo, links vivos.
 - ADRs: 026.
 
-**Estado:** a rota de frase do dia possui implementação sobre o SQLite curado,
-com versão do dataset e falha explícita. A distribuição do arquivo no ambiente de
-produção permanece pendente e deve ser resolvida antes do deploy dessa mudança.
+**Estado:** concluída. A frase diária usa o SQLite curado, o widget e a vitrine
+consomem a mesma regra, e a imagem imutável com a base validada está publicada no
+Railway. A interface oferece gerador, dez coleções editoriais e documentação de uso.
 
 ### Fase 2 · Grafo de influências
 Usa a natureza-grafo do Wikidata que já consultamos.
@@ -71,6 +75,13 @@ Usa a natureza-grafo do Wikidata que já consultamos.
 **Estado:** primeira fatia implementada. O endpoint e a visualização acessível cobrem
 relações diretas. Expansão recursiva e force layout ficam condicionados à utilidade
 observada, para evitar custo upstream e complexidade visual sem demanda comprovada.
+
+### Próxima entrega · Coleções verificáveis
+
+- auditoria reproduzível da cobertura diária por coleção;
+- página própria com descrição, pensadores e amostra curada;
+- teste real de incorporação antes de ampliar o corpus;
+- correção de lacunas editoriais orientada pelo relatório, não por volume bruto.
 
 ### Fase 3 · Busca semântica
 O "wow" ML — o mais pesado, por isso depois da base.

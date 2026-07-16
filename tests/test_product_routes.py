@@ -103,6 +103,20 @@ def test_home_explains_product_and_integrations() -> None:
     assert 'id="max-length"' in response.text
     assert 'id="copy-status" role="status" aria-live="polite"' in response.text
     assert 'aria-label="Navegação principal"' in response.text
+    assert 'href="/collections"' in response.text
+
+
+def test_collections_page_exposes_editorial_catalog_and_daily_samples() -> None:
+    response = client().get("/collections")
+
+    assert response.status_code == 200
+    assert "Dez maneiras de começar" in response.text
+    assert response.text.count('class="collection-card"') == 10
+    assert "Existência e absurdo" in response.text
+    assert "Indivíduo e liberdade" in response.text
+    assert "A liberdade é uma oportunidade de ser melhor." in response.text
+    assert "/widget?collection=existencia-e-absurdo&amp;mode=daily" in response.text
+    assert "/v1/quote-of-the-day?collection=universo-e-humanidade" in response.text
 
 
 def test_quote_of_the_day_exposes_selection_context() -> None:
