@@ -82,6 +82,13 @@ O `HEALTHCHECK` do `Dockerfile.release` protege a execução do container, mas n
 substitui o Healthcheck Path do Railway. É essa configuração da plataforma que
 impede a troca de tráfego até `/health/dataset` responder HTTP 200.
 
+## Estado atual
+
+O serviço público consome uma tag imutável do GHCR produzida por esse workflow.
+Um `railway up` direto não é o caminho de produção, pois não transporta o SQLite
+curado. Mudanças de código seguem o mesmo ciclo de execução seca, publicação da
+imagem e promoção explícita da nova tag no Railway.
+
 ## Rollback
 
 O rollback primário seleciona o deployment anterior no Railway, que restaura a

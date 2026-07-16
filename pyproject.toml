@@ -35,6 +35,9 @@ dev = [
 Repository = "https://github.com/leonardo-michelotti/sisyphus-api"
 Documentation = "https://sisyphus-public-production.up.railway.app/docs"
 
+[project.scripts]
+sisyphus-audit = "sisyphus.audit:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

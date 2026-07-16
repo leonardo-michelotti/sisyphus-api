@@ -203,7 +203,7 @@ button:hover { background: var(--accent-soft); }
 .footer .links { margin-top: 16px; }
 .widget { min-height: 100vh; display: grid; place-items: center; padding: 28px; background: var(--bg); }
 .quote { width: min(720px, 100%); }
-blockquote { margin: 0; font: 400 clamp(25px, 5vw, 44px)/1.25 Georgia, serif; }
+.quote blockquote { margin: 0; font: 400 clamp(25px, 5vw, 44px)/1.25 Georgia, serif; }
 .author { margin-top: 24px; color: var(--accent); font-weight: 650; }
 .context, .source { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.45; }
 .source { margin-top: 20px; font-size: 11px; }
@@ -231,6 +231,21 @@ blockquote { margin: 0; font: 400 clamp(25px, 5vw, 44px)/1.25 Georgia, serif; }
 .influence-name { font: 500 18px/1.25 Georgia, serif; text-underline-offset: 4px; }
 .influence-name:hover { color: var(--accent); }
 .lineage-note { max-width: 760px; margin: 24px 0 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.collection-head { max-width: 800px; padding: 34px 0 58px; }
+.collection-head h1 { max-width: 760px; }
+.collection-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 28px; }
+.collection-summary span { border: 1px solid var(--line); padding: 8px 11px; color: var(--muted); font-size: 12px; }
+.collection-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 0 0 72px; }
+.collection-card { display: grid; grid-template-rows: auto auto 1fr auto; min-height: 410px; border: 1px solid var(--line); background: var(--panel); padding: 26px; }
+.collection-number { color: var(--accent); font: 12px ui-monospace, monospace; }
+.collection-card h2 { margin: 22px 0 10px; font: 500 30px/1.1 Georgia, serif; }
+.collection-description { margin: 0; color: var(--muted); line-height: 1.65; }
+.collection-people { margin: 20px 0 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.collection-sample { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--line); }
+.collection-sample blockquote { margin: 0; font: 500 20px/1.4 Georgia, serif; }
+.collection-sample cite { display: block; margin-top: 13px; color: var(--accent); font-size: 12px; font-style: normal; }
+.collection-actions { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 26px; font-size: 13px; }
+.collection-actions a { color: var(--accent); text-underline-offset: 4px; }
 @media (max-width: 820px) {
   .hero { grid-template-columns: 1fr; }
   .still-life { justify-self: start; width: 280px; height: 190px; }
@@ -242,6 +257,7 @@ blockquote { margin: 0; font: 400 clamp(25px, 5vw, 44px)/1.25 Georgia, serif; }
   .section-head, .technical-note, .quiet-section { grid-template-columns: 1fr; gap: 28px; }
   .lineage { grid-template-columns: 1fr; align-items: start; }
   .relation { grid-template-columns: 70px 1fr; align-items: center; text-align: left; }
+  .collection-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .shell { width: min(100% - 28px, 1080px); padding-top: 14px; }
@@ -295,7 +311,8 @@ async def home() -> HTMLResponse:
     <main class="shell" id="conteudo">
       <nav class="topnav" aria-label="Navegação principal">
         <a class="brand" href="/">Sisyphus</a>
-        <div class="links"><a href="#gerador">Gerador</a><a href="#usar">Como usar</a>
+        <div class="links"><a href="#gerador">Gerador</a><a href="/collections">Coleções</a>
+          <a href="#usar">Como usar</a>
           <a href="/docs">API</a><a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a></div>
       </nav>
       <header class="hero">
@@ -358,6 +375,7 @@ async def home() -> HTMLResponse:
       </section>
       <footer class="footer"><p>Só isso: uma frase, sua fonte e uma URL.</p>
         <nav class="links" aria-label="Links do rodapé"><a href="/docs">API</a>
+          <a href="/collections">Coleções</a>
           <a href="/influences">Influências</a>
           <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a></nav>
       </footer>
@@ -381,6 +399,55 @@ status.textContent='Link copiado.';}catch{status.textContent='Não foi possível
 generated.textContent=path();
 </script>"""
     return HTMLResponse(_document("Sisyphus", body, script))
+
+
+@router.get("/collections", response_class=HTMLResponse, include_in_schema=False)
+async def collections_page(repository: DailyQuotes) -> HTMLResponse:
+    """Apresenta os recortes editoriais e uma amostra da base curada."""
+    collections = list_collections()
+    cards: list[str] = []
+    for index, collection in enumerate(collections, start=1):
+        try:
+            selection = repository.select(collection_slug=collection.slug)
+            sample = (
+                f"<blockquote>“{html.escape(selection.frase.texto)}”</blockquote>"
+                f"<cite>{html.escape(selection.frase.autor)}</cite>"
+            )
+        except SisyphusError:
+            sample = "<p class='empty'>Amostra diária indisponível.</p>"
+        widget_query = urlencode(
+            {"collection": collection.slug, "mode": "daily", "show_context": "true"}
+        )
+        people = ", ".join(collection.pensadores)
+        cards.append(
+            f"""<article class="collection-card">
+              <span class="collection-number">{index:02d}</span><div>
+                <h2>{html.escape(collection.titulo)}</h2>
+                <p class="collection-description">{html.escape(collection.descricao)}</p>
+                <p class="collection-people">{html.escape(people)}</p></div>
+              <div class="collection-sample">{sample}</div>
+              <nav class="collection-actions" aria-label="Ações de {html.escape(collection.titulo)}">
+                <a href="/widget?{html.escape(widget_query)}">Abrir widget</a>
+                <a href="/v1/quote-of-the-day?collection={html.escape(collection.slug)}">Ver JSON</a>
+              </nav></article>"""
+        )
+    body = f"""<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+    <main class="shell" id="conteudo"><nav class="topnav" aria-label="Navegação principal">
+      <a class="brand" href="/">Sisyphus</a><div class="links"><a href="/">Gerador</a>
+        <a href="/influences">Influências</a><a href="/docs">API</a>
+        <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a>
+      </div></nav><header class="collection-head"><p class="eyebrow">Coleções editoriais</p>
+      <h1>Dez maneiras de começar.</h1>
+      <p class="lead">Cada coleção aproxima quatro vozes por uma pergunta comum. A amostra
+      vem da base revisada e muda uma vez por dia.</p>
+      <div class="collection-summary"><span>10 coleções</span><span>18 pensadores</span>
+        <span>fontes preservadas</span></div></header>
+      <section class="collection-grid" aria-label="Coleções disponíveis">{"".join(cards)}</section>
+      <footer class="footer"><p>Escolha um recorte e deixe a frase por perto.</p>
+        <nav class="links" aria-label="Links do rodapé"><a href="/">Voltar ao gerador</a>
+          <a href="/influences">Influências</a><a href="/docs">API</a></nav>
+      </footer></main>"""
+    return HTMLResponse(_document("Coleções · Sisyphus", body))
 
 
 @router.get("/influences", response_class=HTMLResponse, include_in_schema=False)
@@ -429,7 +496,8 @@ async def influences_page(service: Service, thinker: str = "Albert Camus") -> HT
     body = f"""<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
     <main class="shell" id="conteudo"><nav class="topnav" aria-label="Navegação principal">
       <a class="brand" href="/">Sisyphus</a><div class="links"><a href="/">Gerador</a>
-        <a href="/docs">API</a><a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a>
+        <a href="/collections">Coleções</a><a href="/docs">API</a>
+        <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a>
       </div></nav><header class="lineage-head"><p class="eyebrow">Linhagem intelectual</p>
       <h1>Nenhuma ideia chega sozinha.</h1>
       <p class="lead">Escolha um nome e percorra as relações de “influenciado por” registradas

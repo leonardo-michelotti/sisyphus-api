@@ -17,9 +17,9 @@ superfícies:
 > Uma frase melhor escolhida, apresentada com contexto e pronta para incorporar.
 
 O diferencial não é apenas sortear citações. Cada resultado preserva autoria,
-categoria, obra quando disponível, fonte e licença. No MVP, as coleções
-editoriais organizam personalidades por recortes temáticos; as frases continuam
-vindo dinamicamente das fontes. Curadoria frase a frase é uma evolução posterior.
+categoria, obra quando disponível, fonte e licença. As coleções editoriais
+organizam personalidades por recortes temáticos. A frase diária vem do SQLite
+curado; exploração aleatória, busca e perfis continuam consultando as fontes vivas.
 
 ## Público
 
@@ -37,25 +37,31 @@ não como requisito do MVP.
 - frases atribuídas com proveniência;
 - frase aleatória com filtros;
 - frase do dia determinística em UTC;
-- cinco coleções editoriais de personalidades;
+- dez coleções editoriais de personalidades;
 - widget escuro incorporável;
 - página simples para configurar e copiar o link;
-- Swagger público.
+- Swagger público;
 - mapa de influências intelectuais diretas, com proveniência Wikidata.
 
-O MVP não exige conta, banco de dados, painel administrativo ou infraestrutura
-adicional. As coleções vivem no código e passam pelo mesmo versionamento da API.
+O MVP não exige conta, painel administrativo ou infraestrutura adicional. As
+coleções vivem no código e passam pelo mesmo versionamento da API. O único banco
+de runtime é um SQLite somente leitura, construído e validado antes do deploy.
 
-## Catálogo inicial
+## Catálogo editorial
 
 O recorte inclui personalidades que contribuíram para o pensamento, a ciência,
-a cultura e a compreensão da sociedade. As primeiras coleções são:
+a cultura e a compreensão da sociedade. As coleções atuais são:
 
 1. Existência e absurdo;
 2. Ciência e curiosidade;
 3. Liberdade e responsabilidade;
 4. Sociedade e poder;
-5. Conhecimento e dúvida.
+5. Conhecimento e dúvida;
+6. Trabalho e vocação;
+7. Revolta e resistência;
+8. Método e descoberta;
+9. Universo e humanidade;
+10. Indivíduo e liberdade.
 
 ## Princípios
 
