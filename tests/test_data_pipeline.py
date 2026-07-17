@@ -20,6 +20,7 @@ from sisyphus.pipeline.build import (
     _fetch_one,
     _get_with_retry,
     _load_bronze,
+    _read_supplemental_quotes,
     _record_build_provenance,
     _source_record,
     audit,
@@ -39,6 +40,44 @@ def _snapshot(html: str) -> Snapshot:
         fetched_at="2026-07-13T12:00:00+00:00",
         wikiquote={"parse": {"revid": 225583, "text": html}},
         wikidata={"entities": {"Q913": {}}},
+    )
+
+
+def test_supplemental_source_requires_translation_provenance(tmp_path: Path) -> None:
+    source = tmp_path / "supplemental.csv"
+    source.write_text(
+        "thinker_qid,thinker_name,text,original_text,original_language,category,work,"
+        "source_url,source_name,source_license,source_revision,translator_name,"
+        "translation_license,translation_url,reviewed_at\n"
+        "Q34670,Albert Camus,Texto traduzido,Texte original,,obra,O Mito de Sísifo,"
+        "https://example.test/source,Edição,Public domain,1,,,,2026-07-17T12:00:00Z\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="tradução sem proveniência completa"):
+        _read_supplemental_quotes(source)
+
+
+def test_supplemental_source_accepts_reviewed_translation(tmp_path: Path) -> None:
+    source = tmp_path / "supplemental.csv"
+    source.write_text(
+        "thinker_qid,thinker_name,text,original_text,original_language,category,work,"
+        "source_url,source_name,source_license,source_revision,translator_name,"
+        "translation_license,translation_url,reviewed_at\n"
+        "Q34670,Albert Camus,Texto traduzido,Texte original,fr,obra,O Mito de Sísifo,"
+        "https://example.test/source,Edição,Public domain,1,Projeto Sisyphus,CC0 1.0,"
+        "https://example.test/translation,2026-07-17T12:00:00Z\n",
+        encoding="utf-8",
+    )
+
+    rows = _read_supplemental_quotes(source)
+
+    assert len(rows) == 1
+    assert rows[0][3:5] == ("Texte original", "fr")
+    assert rows[0][11:14] == (
+        "Projeto Sisyphus",
+        "CC0 1.0",
+        "https://example.test/translation",
     )
 
 
@@ -105,9 +144,9 @@ def test_pipeline_classifies_editorial_corpus(tmp_path: Path, fixtures_dir: Path
         assert con.execute("pragma integrity_check").fetchone() == ("ok",)
         metadata = con.execute("select * from build_metadata").fetchone()
         assert metadata is not None
-        assert metadata[0] == 2
+        assert metadata[0] == 3
         assert len(metadata[1]) == 16
-        assert metadata[3:] == ("2", "1", "fixture-run", "a" * 64, "local")
+        assert metadata[3:] == ("3", "1", "fixture-run", "a" * 64, "local")
         assert con.execute("select count(*) from quotes").fetchone() == (5,)
         assert con.execute(
             "select count(*) from quotes_fts where quotes_fts match 'velhice'"
@@ -321,7 +360,7 @@ async def test_ingest_limits_concurrency(monkeypatch: pytest.MonkeyPatch, tmp_pa
             """select run_id, manifest_sha256, pipeline_version,
                       parser_version, source_commit
                from pipeline_build_metadata"""
-        ).fetchone() == ("limited", manifest_sha256, "2", "1", "local")
+        ).fetchone() == ("limited", manifest_sha256, "3", "1", "local")
 
 
 async def test_failed_source_is_visible_in_manifest(
@@ -368,9 +407,12 @@ def _create_publication_warehouse(path: Path, *, eligible: bool) -> None:
                'occurrence'::varchar occurrence_id, 'quote'::varchar quote_id,
                'Q913'::varchar thinker_qid,
                'Uma frase suficientemente longa para publicação.'::varchar quote_text,
+               null::varchar original_text, null::varchar original_language,
                'verificada'::varchar category, null::varchar as work,
                'https://example.test'::varchar source_url, 'Wikiquote'::varchar source_name,
                'CC BY-SA 4.0'::varchar source_license, 1::bigint source_revision,
+               null::varchar translator_name, null::varchar translation_license,
+               null::varchar translation_url,
                45::integer character_count, 'accepted'::varchar curation_status,
                'passed_automatic_rules'::varchar quality_reason,
                ['passed_automatic_rules']::varchar[] quality_reasons,
@@ -386,12 +428,17 @@ def test_dataset_version_covers_all_serving_fields() -> None:
         "quote",
         "Q1",
         "Uma frase suficientemente longa para publicação.",
+        None,
+        None,
         "verificada",
         None,
         "https://example.test",
         "Wikiquote",
         "CC BY-SA 4.0",
         1,
+        None,
+        None,
+        None,
         48,
         "accepted",
         "passed_automatic_rules",
@@ -400,7 +447,7 @@ def test_dataset_version_covers_all_serving_fields() -> None:
     )
 
     original = _dataset_version(thinkers, [quote])
-    changed_license = _dataset_version(thinkers, [(*quote[:8], "CC BY-SA 5.0", *quote[9:])])
+    changed_license = _dataset_version(thinkers, [(*quote[:10], "CC BY-SA 5.0", *quote[11:])])
     changed_thinker = _dataset_version(
         [("Q1", "Outro nome", "Título", "https://example.test", 1)], [quote]
     )

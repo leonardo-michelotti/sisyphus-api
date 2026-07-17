@@ -142,6 +142,8 @@ print(f'{selection["frase"]["texto"]} — {selection["frase"]["autor"]}')
     "categoria": "verificada",
     "obra": null,
     "original": null,
+    "idioma_original": null,
+    "traducao": null,
     "fonte": {
       "fonte": "Wikiquote",
       "licenca": "CC BY-SA 4.0",
@@ -152,7 +154,7 @@ print(f'{selection["frase"]["texto"]} — {selection["frase"]["autor"]}')
   "data": "AAAA-MM-DD",
   "colecao": null,
   "dataset_version": "hash-do-dataset",
-  "dataset_schema": 2
+  "dataset_schema": 3
 }
 ```
 
@@ -204,13 +206,14 @@ O Sisyphus é uma API somente leitura. Um pipeline separado coleta e organiza o
 conteúdo; a aplicação recebe um SQLite já revisado para servir a frase do dia.
 
 ```text
-Wikiquote + Wikidata
-        │
-        ▼
-Python + HTTPX
-        │
-        ▼
-bronze: JSON + Parquet
+Wikiquote + Wikidata       fonte editorial versionada
+        │                              │
+        ▼                              ▼
+Python + HTTPX              validação de fonte e tradução
+        │                              │
+        └──────────────┬───────────────┘
+                       ▼
+             bronze: JSON + Parquet
         │
         ▼
 dbt-duckdb: silver + gold + testes
@@ -232,6 +235,7 @@ Detalhes:
 
 - [arquitetura](docs/ARQUITETURA.md);
 - [pipeline de dados](docs/DATA_PIPELINE.md);
+- [fontes suplementares](docs/SUPPLEMENTAL_SOURCES.md);
 - [decisões técnicas](docs/DECISIONS.md);
 - [processo de release](docs/RELEASE.md);
 - [visão e roadmap](docs/PRODUCT_VISION.md).
