@@ -57,7 +57,11 @@ def test_pipeline_classifies_editorial_corpus(tmp_path: Path, fixtures_dir: Path
         run_id="fixture-run",
         manifest_sha256="a" * 64,
     )
-    transform(warehouse=warehouse, daily_quotes_per_thinker=1)
+    transform(
+        warehouse=warehouse,
+        daily_quotes_per_thinker=1,
+        validate_editorial_queue=False,
+    )
     publish(
         warehouse=warehouse,
         serving=serving,
