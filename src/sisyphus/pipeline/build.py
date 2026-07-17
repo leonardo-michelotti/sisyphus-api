@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import csv
 import hashlib
 import html
 import json
@@ -29,10 +30,28 @@ WAREHOUSE = DATA / "sisyphus.duckdb"
 SERVING = DATA / "sisyphus.db"
 REPORT = ROOT / "reports" / "data-quality.html"
 PARSER_VERSION = "1"
-PIPELINE_VERSION = "2"
+PIPELINE_VERSION = "3"
 MAX_FETCH_ATTEMPTS = 3
 MAX_CONCURRENT_FETCHES = 4
 TRANSIENT_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
+SUPPLEMENTAL_QUOTES = ROOT / "editorial" / "supplemental_quotes.csv"
+SUPPLEMENTAL_FIELDS = (
+    "thinker_qid",
+    "thinker_name",
+    "text",
+    "original_text",
+    "original_language",
+    "category",
+    "work",
+    "source_url",
+    "source_name",
+    "source_license",
+    "source_revision",
+    "translator_name",
+    "translation_license",
+    "translation_url",
+    "reviewed_at",
+)
 
 
 @dataclass(frozen=True)
@@ -271,16 +290,117 @@ async def ingest(
     return list(snapshots)
 
 
+def _read_supplemental_quotes(path: Path) -> list[tuple[object, ...]]:
+    """Lê a fonte editorial versionada e bloqueia proveniência incompleta."""
+    with path.open(encoding="utf-8-sig", newline="") as source:
+        reader = csv.DictReader(source)
+        if tuple(reader.fieldnames or ()) != SUPPLEMENTAL_FIELDS:
+            raise ValueError("cabeçalho da fonte suplementar é incompatível")
+        records = list(reader)
+
+    rows: list[tuple[object, ...]] = []
+    seen: set[tuple[str, str]] = set()
+    for line_number, raw in enumerate(records, start=2):
+        record = {field: (raw.get(field) or "").strip() for field in SUPPLEMENTAL_FIELDS}
+        required = (
+            "thinker_qid",
+            "thinker_name",
+            "text",
+            "category",
+            "source_url",
+            "source_name",
+            "source_license",
+            "source_revision",
+            "reviewed_at",
+        )
+        missing = [field for field in required if not record[field]]
+        if missing:
+            raise ValueError(
+                f"fonte suplementar, linha {line_number}: campos ausentes: {', '.join(missing)}"
+            )
+        if record["thinker_name"] not in ALL_THINKERS:
+            raise ValueError(f"fonte suplementar, linha {line_number}: pensador fora do catálogo")
+        if record["category"] not in {"verificada", "obra", "atribuida"}:
+            raise ValueError(f"fonte suplementar, linha {line_number}: categoria inválida")
+        if not record["source_url"].startswith("https://"):
+            raise ValueError(f"fonte suplementar, linha {line_number}: source_url deve usar HTTPS")
+        try:
+            source_revision = int(record["source_revision"])
+        except ValueError as exc:
+            raise ValueError(
+                f"fonte suplementar, linha {line_number}: source_revision deve ser inteiro"
+            ) from exc
+        if source_revision < 1:
+            raise ValueError(
+                f"fonte suplementar, linha {line_number}: source_revision deve ser positivo"
+            )
+        try:
+            reviewed_at = datetime.fromisoformat(record["reviewed_at"].replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(
+                f"fonte suplementar, linha {line_number}: reviewed_at deve ser ISO 8601"
+            ) from exc
+        if reviewed_at.tzinfo is None:
+            raise ValueError(
+                f"fonte suplementar, linha {line_number}: reviewed_at deve conter fuso horário"
+            )
+
+        translation_fields = (
+            record["original_language"],
+            record["translator_name"],
+            record["translation_license"],
+            record["translation_url"],
+        )
+        if record["original_text"] and not all(translation_fields):
+            raise ValueError(
+                f"fonte suplementar, linha {line_number}: tradução sem proveniência completa"
+            )
+        if not record["original_text"] and any(translation_fields):
+            raise ValueError(
+                f"fonte suplementar, linha {line_number}: metadados de tradução sem original"
+            )
+        if record["translation_url"] and not record["translation_url"].startswith("https://"):
+            raise ValueError(
+                f"fonte suplementar, linha {line_number}: translation_url deve usar HTTPS"
+            )
+        identity = (record["thinker_qid"], record["text"])
+        if identity in seen:
+            raise ValueError(f"fonte suplementar, linha {line_number}: frase duplicada")
+        seen.add(identity)
+        rows.append(
+            (
+                record["thinker_qid"],
+                record["thinker_name"],
+                record["text"],
+                record["original_text"] or None,
+                record["original_language"] or None,
+                record["category"],
+                record["work"] or None,
+                record["source_url"],
+                record["source_name"],
+                record["source_license"],
+                source_revision,
+                record["translator_name"] or None,
+                record["translation_license"] or None,
+                record["translation_url"] or None,
+                reviewed_at,
+            )
+        )
+    return rows
+
+
 def _load_bronze(
     snapshots: list[Snapshot],
     *,
     warehouse: Path = WAREHOUSE,
     bronze_dir: Path = BRONZE,
+    supplemental_path: Path = SUPPLEMENTAL_QUOTES,
 ) -> None:
     warehouse.parent.mkdir(parents=True, exist_ok=True)
     bronze_dir.mkdir(parents=True, exist_ok=True)
     with duckdb.connect(str(warehouse)) as con:
         con.execute("drop table if exists bronze_quotes")
+        con.execute("drop table if exists bronze_supplemental_quotes")
         con.execute("drop table if exists bronze_thinkers")
         con.execute(
             """create table bronze_quotes (
@@ -289,6 +409,22 @@ def _load_bronze(
                 source_revision bigint, fetched_at timestamptz
             )"""
         )
+        con.execute(
+            """create table bronze_supplemental_quotes (
+                thinker_qid varchar, thinker_name varchar, text varchar,
+                original_text varchar, original_language varchar, category varchar,
+                work varchar, source_url varchar, source_name varchar, source_license varchar,
+                source_revision bigint, translator_name varchar, translation_license varchar,
+                translation_url varchar, reviewed_at timestamptz
+            )"""
+        )
+        supplemental_rows = _read_supplemental_quotes(supplemental_path)
+        if supplemental_rows:
+            con.executemany(
+                "insert into bronze_supplemental_quotes values "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                supplemental_rows,
+            )
         con.execute(
             """create table bronze_thinkers (
                 qid varchar, name varchar, wikiquote_title varchar, source_url varchar,
@@ -331,6 +467,11 @@ def _load_bronze(
                 )
         con.execute(
             f"copy bronze_quotes to '{(bronze_dir / 'quotes.parquet').as_posix()}' "
+            "(format parquet, compression zstd)"
+        )
+        con.execute(
+            "copy bronze_supplemental_quotes to "
+            f"'{(bronze_dir / 'supplemental_quotes.parquet').as_posix()}' "
             "(format parquet, compression zstd)"
         )
         con.execute(
@@ -481,12 +622,17 @@ def publish(
                         quote_id text not null,
                         thinker_qid text not null references thinkers(thinker_qid),
                         quote_text text not null,
+                        original_text text,
+                        original_language text,
                         category text not null,
                         work text,
                         source_url text not null,
                         source_name text not null,
                         source_license text not null,
                         source_revision integer not null,
+                        translator_name text,
+                        translation_license text,
+                        translation_url text,
                         character_count integer not null,
                         curation_status text not null,
                         quality_reason text not null,
@@ -505,8 +651,10 @@ def publish(
                 ).fetchall()
                 out.executemany("insert into thinkers values (?, ?, ?, ?, ?, ?)", thinkers)
                 quotes = source.execute(
-                    """select occurrence_id, quote_id, thinker_qid, quote_text, category, work,
+                    """select occurrence_id, quote_id, thinker_qid, quote_text,
+                              original_text, original_language, category, work,
                               source_url, source_name, source_license, source_revision,
+                              translator_name, translation_license, translation_url,
                               character_count, curation_status, quality_reason,
                               to_json(quality_reasons), cast(is_daily_eligible as integer)
                        from fct_quotes order by thinker_qid, occurrence_id"""
@@ -531,7 +679,8 @@ def publish(
                     ],
                 )
                 out.executemany(
-                    "insert into quotes values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "insert into quotes values "
+                    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     quotes,
                 )
             out.execute(

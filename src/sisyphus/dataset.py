@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-SERVING_SCHEMA_VERSION = 2
+SERVING_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)

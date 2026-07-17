@@ -5,6 +5,7 @@ sources:
     schema: main
     tables:
       - name: bronze_quotes
+      - name: bronze_supplemental_quotes
       - name: bronze_thinkers
 
 models:
@@ -21,6 +22,12 @@ models:
         tests: [not_null]
       - name: source_license
         tests: [not_null]
+      - name: source_kind
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [wikiquote, supplemental]
       - name: category
         tests:
           - accepted_values:

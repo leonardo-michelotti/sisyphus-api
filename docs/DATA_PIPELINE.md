@@ -18,8 +18,10 @@ antes da hora.
 flowchart LR
     WQ[Wikiquote] --> ING[Ingestão HTTP]
     WD[Wikidata] --> ING
+    ED[CSV editorial versionado] --> VAL[Validação de fonte e tradução]
     ING --> RAW[Snapshots JSON imutáveis]
     ING --> BR[Bronze em Parquet]
+    VAL --> BR
     BR --> STG[Silver: stg_quotes]
     STG --> GOLD[Gold: fct_quotes]
     GOLD --> DB[SQLite + FTS5]
@@ -39,6 +41,12 @@ As tabelas de frases e pensadores são exportadas como Parquet comprimido dentro
 mesmo diretório da execução. Uma página válida sem frases produz um Parquet vazio,
 sem interromper o restante do pipeline.
 
+`editorial/supplemental_quotes.csv` é uma segunda entrada, pequena e versionada.
+Ela cobre lacunas que a coleta automática não resolve. O Python exige fonte,
+licença, revisão e data de conferência. Quando houver tradução, também exige texto
+e idioma originais, responsável, licença e URL da tradução. O arquivo vazio é um
+estado válido e produz seu próprio Parquet bronze.
+
 ## Resiliência proporcional ao produto
 
 A ingestão mantém no máximo quatro pensadores em processamento simultâneo. Cada
@@ -55,7 +63,7 @@ indisponível, o manifesto identifica o pensador e o tipo da falha, o warehouse 
 
 `stg_quotes` normaliza espaços e calcula o tamanho. `quote_id` identifica o conteúdo
 por QID e texto normalizado; `occurrence_id` identifica sua ocorrência editorial,
-incluindo categoria, obra e revisão da fonte. Os dois IDs são SHA-256 estáveis.
+incluindo categoria, obra, revisão e URL da fonte. Os dois IDs são SHA-256 estáveis.
 Essa separação permite reconhecer a mesma frase sem apagar mudanças de contexto.
 
 ## Gold: decisão editorial explícita
@@ -89,7 +97,8 @@ portanto, seu `quote_id`, o gate bloqueia a publicação até nova revisão huma
 ## Artefato de publicação
 
 `data/sisyphus.db` é reconstruído a partir da gold. Ele contém proveniência,
-licença, chaves, índices e uma tabela FTS5 para busca textual. O pipeline primeiro
+licença, texto original, crédito de tradução, chaves, índices e uma tabela FTS5
+para busca textual. O pipeline primeiro
 monta e valida um candidato; somente depois substitui o arquivo vigente com uma
 operação atômica. Uma falha mantém intacto o último artefato válido.
 

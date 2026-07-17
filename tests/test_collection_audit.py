@@ -36,8 +36,8 @@ def _database(path: Path) -> Path:
         )
         connection.execute(
             """insert into build_metadata values (
-                2, '0123456789abcdef', '2026-07-16T12:00:00Z',
-                '2', '1', 'run-test', ?, 'commit-test'
+                3, '0123456789abcdef', '2026-07-16T12:00:00Z',
+                '3', '1', 'run-test', ?, 'commit-test'
             )""",
             ["a" * 64],
         )

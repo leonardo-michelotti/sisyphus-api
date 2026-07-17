@@ -19,7 +19,7 @@ from sisyphus.repositories.quotes import SQLiteQuoteRepository
 from sisyphus.schemas import QuoteCategory
 
 
-def _database(path: Path, *, schema_version: int = 2) -> Path:
+def _database(path: Path, *, schema_version: int = 3) -> Path:
     with sqlite3.connect(path) as connection:
         connection.executescript(
             """create table build_metadata (
@@ -40,11 +40,16 @@ def _database(path: Path, *, schema_version: int = 2) -> Path:
                 occurrence_id text primary key,
                 thinker_qid text not null,
                 quote_text text not null,
+                original_text text,
+                original_language text,
                 category text not null,
                 work text,
                 source_name text not null,
                 source_license text not null,
                 source_url text not null,
+                translator_name text,
+                translation_license text,
+                translation_url text,
                 character_count integer not null,
                 is_daily_eligible integer not null
             );"""
@@ -61,17 +66,22 @@ def _database(path: Path, *, schema_version: int = 2) -> Path:
             [("Q34670", "Albert Camus"), ("Q9358", "Friedrich Nietzsche")],
         )
         connection.executemany(
-            "insert into quotes values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "insert into quotes values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     "occ-1",
                     "Q34670",
                     "A liberdade é uma oportunidade de ser melhor.",
+                    None,
+                    None,
                     "verificada",
                     None,
                     "Wikiquote",
                     "CC BY-SA 4.0",
                     "https://example.test/camus",
+                    None,
+                    None,
+                    None,
                     48,
                     1,
                 ),
@@ -79,11 +89,16 @@ def _database(path: Path, *, schema_version: int = 2) -> Path:
                     "occ-2",
                     "Q34670",
                     "Criar é viver duas vezes, com atenção ao mundo.",
+                    None,
+                    None,
                     "obra",
                     "O Mito de Sísifo",
                     "Wikiquote",
                     "CC BY-SA 4.0",
                     "https://example.test/camus",
+                    None,
+                    None,
+                    None,
                     49,
                     1,
                 ),
@@ -91,11 +106,16 @@ def _database(path: Path, *, schema_version: int = 2) -> Path:
                     "occ-3",
                     "Q9358",
                     "Este registro não pode participar da seleção diária.",
+                    None,
+                    None,
                     "verificada",
                     None,
                     "Wikiquote",
                     "CC BY-SA 4.0",
                     "https://example.test/nietzsche",
+                    None,
+                    None,
+                    None,
                     54,
                     0,
                 ),
@@ -113,7 +133,7 @@ def test_daily_selection_is_stable_and_reports_dataset(tmp_path: Path) -> None:
     assert first == second
     assert first.data == "2026-07-13"
     assert first.dataset_version == "0123456789abcdef"
-    assert first.dataset_schema == 2
+    assert first.dataset_schema == 3
     assert first.frase.fonte.licenca == "CC BY-SA 4.0"
 
 
@@ -129,6 +149,36 @@ def test_daily_selection_applies_curated_filters(tmp_path: Path) -> None:
 
     assert result.frase.categoria is QuoteCategory.obra
     assert result.frase.obra == "O Mito de Sísifo"
+
+
+def test_daily_selection_exposes_original_and_translation_credit(tmp_path: Path) -> None:
+    path = _database(tmp_path / "sisyphus.db")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            """update quotes
+               set original_text = ?, original_language = ?, translator_name = ?,
+                   translation_license = ?, translation_url = ?
+               where occurrence_id = 'occ-2'""",
+            (
+                "Créer, c'est vivre deux fois.",
+                "fr",
+                "Projeto Sisyphus",
+                "CC0 1.0",
+                "https://example.test/translation",
+            ),
+        )
+    repository = SQLiteQuoteRepository(path)
+
+    result = repository.select(
+        thinker="Albert Camus",
+        category=QuoteCategory.obra,
+        on_date=date(2026, 7, 13),
+    )
+
+    assert result.frase.original == "Créer, c'est vivre deux fois."
+    assert result.frase.idioma_original == "fr"
+    assert result.frase.traducao is not None
+    assert result.frase.traducao.responsavel == "Projeto Sisyphus"
 
 
 def test_ineligible_quote_never_participates(tmp_path: Path) -> None:
@@ -191,7 +241,7 @@ def test_readiness_reports_dataset_version(monkeypatch: pytest.MonkeyPatch, tmp_
     assert response.status_code == 200
     assert response.json()["dataset"] == {
         "status": "ok",
-        "schema": 2,
+        "schema": 3,
         "version": "0123456789abcdef",
     }
 
@@ -207,7 +257,7 @@ def test_local_dataset_health_does_not_call_upstreams(
     assert response.status_code == 200
     assert response.json() == {
         "status": "ready",
-        "dataset": {"status": "ok", "schema": 2, "version": "0123456789abcdef"},
+        "dataset": {"status": "ok", "schema": 3, "version": "0123456789abcdef"},
     }
 
 

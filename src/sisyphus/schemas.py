@@ -24,6 +24,14 @@ class Attribution(BaseModel):
     url: str | None = Field(default=None, examples=["https://pt.wikiquote.org/wiki/Albert_Camus"])
 
 
+class TranslationCredit(BaseModel):
+    """Responsabilidade e licença da tradução usada pelo catálogo."""
+
+    responsavel: str
+    licenca: str
+    url: str | None = None
+
+
 class PartialDate(BaseModel):
     """Data possivelmente parcial ou AEC (Wikidata usa `precision`)."""
 
@@ -45,6 +53,12 @@ class Quote(BaseModel):
     categoria: QuoteCategory
     obra: str | None = Field(default=None, description="Obra de origem, se a frase vier de uma")
     original: str | None = Field(default=None, description="Texto no idioma original, se houver")
+    idioma_original: str | None = Field(
+        default=None, description="Código BCP 47 do idioma do texto original"
+    )
+    traducao: TranslationCredit | None = Field(
+        default=None, description="Crédito da tradução para o português, quando aplicável"
+    )
     fonte: Attribution
 
 

@@ -12,7 +12,14 @@ from typing import Protocol
 from ..catalog import ALL_THINKERS, get_collection
 from ..dataset import SERVING_SCHEMA_VERSION, DatasetMetadata
 from ..errors import DatasetUnavailable, InvalidSelection, NoQuotesAvailable, ThinkerNotFound
-from ..schemas import Attribution, CuratedQuoteSelection, Quote, QuoteCategory, SelectionMode
+from ..schemas import (
+    Attribution,
+    CuratedQuoteSelection,
+    Quote,
+    QuoteCategory,
+    SelectionMode,
+    TranslationCredit,
+)
 
 
 class DailyQuoteRepository(Protocol):
@@ -128,8 +135,10 @@ class SQLiteQuoteRepository:
             clauses.append("q.character_count <= ?")
             parameters.append(max_length)
 
-        query = f"""select q.occurrence_id, q.quote_text, t.thinker_name, q.category,
-                           q.work, q.source_name, q.source_license, q.source_url
+        query = f"""select q.occurrence_id, q.quote_text, q.original_text,
+                           q.original_language, t.thinker_name, q.category,
+                           q.work, q.source_name, q.source_license, q.source_url,
+                           q.translator_name, q.translation_license, q.translation_url
                     from quotes q
                     join thinkers t on t.thinker_qid = q.thinker_qid
                     where {" and ".join(clauses)}
@@ -159,6 +168,17 @@ class SQLiteQuoteRepository:
                 autor=row["thinker_name"],
                 categoria=QuoteCategory(row["category"]),
                 obra=row["work"],
+                original=row["original_text"],
+                idioma_original=row["original_language"],
+                traducao=(
+                    TranslationCredit(
+                        responsavel=row["translator_name"],
+                        licenca=row["translation_license"],
+                        url=row["translation_url"],
+                    )
+                    if row["translator_name"]
+                    else None
+                ),
                 fonte=Attribution(
                     fonte=row["source_name"],
                     licenca=row["source_license"],
