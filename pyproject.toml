@@ -33,7 +33,7 @@ dev = [
 
 [project.urls]
 Repository = "https://github.com/leonardo-michelotti/sisyphus-api"
-Documentation = "https://sisyphus-public-production.up.railway.app/docs"
+Documentation = "https://sisyphus-public-production.up.railway.app/api"
 
 [project.scripts]
 sisyphus-audit = "sisyphus.audit:main"

@@ -77,6 +77,7 @@ a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible
 .brand { font: 600 18px Georgia, serif; text-decoration: none; letter-spacing: .02em; }
 .links { display: flex; gap: 22px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
 .links a { text-underline-offset: 4px; }
+.links a[aria-current="page"] { color: var(--ink); text-decoration-color: var(--accent); }
 .topnav .links { margin: 0; }
 .eyebrow {
   margin: 0;
@@ -246,6 +247,28 @@ button:hover { background: var(--accent-soft); }
 .collection-sample cite { display: block; margin-top: 13px; color: var(--accent); font-size: 12px; font-style: normal; }
 .collection-actions { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 26px; font-size: 13px; }
 .collection-actions a { color: var(--accent); text-underline-offset: 4px; }
+.api-head { max-width: 820px; padding: 34px 0 62px; }
+.api-head h1 { max-width: 790px; }
+.api-actions { display: flex; gap: 12px 22px; flex-wrap: wrap; margin-top: 28px; }
+.api-actions a { color: var(--accent); text-underline-offset: 5px; }
+.api-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(300px, .85fr); gap: 14px; padding-bottom: 72px; }
+.api-panel { border: 1px solid var(--line); background: var(--panel); padding: 27px; }
+.api-panel h2 { margin: 8px 0 20px; font: 500 30px/1.15 Georgia, serif; }
+.api-panel > p { color: var(--muted); line-height: 1.65; }
+.api-code { margin-top: 24px; }
+.api-code + .api-code { margin-top: 14px; }
+.api-code span { display: block; margin-bottom: 8px; color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.api-code pre { overflow: auto; margin: 0; border: 1px solid var(--line); background: #090b0e; padding: 16px; color: #d7dbe2; font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.contract-list { display: grid; gap: 0; margin: 25px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.contract-list li { padding: 15px 0; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1.55; }
+.contract-list strong { display: block; margin-bottom: 4px; color: var(--ink); font-weight: 500; }
+.endpoint-section { padding: 72px 0; border-top: 1px solid var(--line); }
+.endpoint-section h2 { margin: 10px 0 30px; font: 500 clamp(34px, 5vw, 50px)/1.05 Georgia, serif; }
+.endpoint-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.endpoint-row { display: grid; grid-template-columns: 56px minmax(250px, .85fr) 1.15fr; gap: 22px; align-items: baseline; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.endpoint-method { color: var(--accent); font: 12px ui-monospace, monospace; }
+.endpoint-path { color: var(--ink); font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+.endpoint-description { color: var(--muted); font-size: 14px; line-height: 1.55; }
 @media (max-width: 820px) {
   .hero { grid-template-columns: 1fr; }
   .still-life { justify-self: start; width: 280px; height: 190px; }
@@ -258,6 +281,7 @@ button:hover { background: var(--accent-soft); }
   .lineage { grid-template-columns: 1fr; align-items: start; }
   .relation { grid-template-columns: 70px 1fr; align-items: center; text-align: left; }
   .collection-grid { grid-template-columns: 1fr; }
+  .api-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .shell { width: min(100% - 28px, 1080px); padding-top: 14px; }
@@ -280,6 +304,8 @@ button:hover { background: var(--accent-soft); }
   .lineage-form label { grid-column: auto; }
   .lineage-form button { width: 100%; }
   .influence-list { grid-template-columns: 1fr; }
+  .endpoint-row { grid-template-columns: 48px 1fr; gap: 10px; }
+  .endpoint-description { grid-column: 2; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 """
@@ -313,7 +339,7 @@ async def home() -> HTMLResponse:
         <a class="brand" href="/">Sisyphus</a>
         <div class="links"><a href="#gerador">Gerador</a><a href="/collections">Coleções</a>
           <a href="#usar">Como usar</a>
-          <a href="/docs">API</a><a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a></div>
+          <a href="/api">API</a><a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a></div>
       </nav>
       <header class="hero">
         <div class="hero-copy"><p class="eyebrow">Café, silêncio e uma frase</p>
@@ -374,7 +400,7 @@ async def home() -> HTMLResponse:
         </div>
       </section>
       <footer class="footer"><p>Só isso: uma frase, sua fonte e uma URL.</p>
-        <nav class="links" aria-label="Links do rodapé"><a href="/docs">API</a>
+        <nav class="links" aria-label="Links do rodapé"><a href="/api">API</a>
           <a href="/collections">Coleções</a>
           <a href="/influences">Influências</a>
           <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a></nav>
@@ -434,7 +460,7 @@ async def collections_page(repository: DailyQuotes) -> HTMLResponse:
     body = f"""<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
     <main class="shell" id="conteudo"><nav class="topnav" aria-label="Navegação principal">
       <a class="brand" href="/">Sisyphus</a><div class="links"><a href="/">Gerador</a>
-        <a href="/influences">Influências</a><a href="/docs">API</a>
+        <a href="/influences">Influências</a><a href="/api">API</a>
         <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a>
       </div></nav><header class="collection-head"><p class="eyebrow">Coleções editoriais</p>
       <h1>Dez maneiras de começar.</h1>
@@ -445,9 +471,80 @@ async def collections_page(repository: DailyQuotes) -> HTMLResponse:
       <section class="collection-grid" aria-label="Coleções disponíveis">{"".join(cards)}</section>
       <footer class="footer"><p>Escolha um recorte e deixe a frase por perto.</p>
         <nav class="links" aria-label="Links do rodapé"><a href="/">Voltar ao gerador</a>
-          <a href="/influences">Influências</a><a href="/docs">API</a></nav>
+          <a href="/influences">Influências</a><a href="/api">API</a></nav>
       </footer></main>"""
     return HTMLResponse(_document("Coleções · Sisyphus", body))
+
+
+@router.get("/api", response_class=HTMLResponse, include_in_schema=False)
+async def api_page() -> HTMLResponse:
+    """Entrada editorial para o contrato REST; o Swagger permanece em /docs."""
+    endpoints = (
+        ("/v1/quote-of-the-day", "Frase diária curada e estável durante a data."),
+        ("/v1/quotes/random", "Seleção ao vivo com filtros por pessoa, coleção e tamanho."),
+        ("/v1/collections", "Catálogo dos dez recortes editoriais."),
+        ("/v1/search?q=", "Busca de personalidades por nome."),
+        ("/v1/thinkers/{nome}", "Perfil, biografia e amostra de frases."),
+        ("/v1/thinkers/{nome}/quotes", "Frases paginadas de uma personalidade."),
+        ("/v1/thinkers/{nome}/influences", "Relações diretas de influência via Wikidata."),
+    )
+    endpoint_rows = "".join(
+        f"<li class='endpoint-row'><span class='endpoint-method'>GET</span>"
+        f"<code class='endpoint-path'>{html.escape(path)}</code>"
+        f"<span class='endpoint-description'>{html.escape(description)}</span></li>"
+        for path, description in endpoints
+    )
+    curl_example = html.escape(
+        'curl "https://sisyphus-public-production.up.railway.app/'
+        'v1/quote-of-the-day?collection=existencia-e-absurdo"'
+    )
+    json_example = html.escape(
+        """{
+  "frase": {
+    "texto": "...",
+    "autor": "Albert Camus",
+    "fonte": {"fonte": "Wikiquote", "licenca": "CC BY-SA 4.0"}
+  },
+  "modo": "daily",
+  "data": "AAAA-MM-DD",
+  "dataset_version": "..."
+}"""
+    )
+    body = f"""<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+    <main class="shell" id="conteudo"><nav class="topnav" aria-label="Navegação principal">
+      <a class="brand" href="/">Sisyphus</a><div class="links"><a href="/">Gerador</a>
+        <a href="/collections">Coleções</a><a href="/influences">Influências</a>
+        <a href="/api" aria-current="page">API</a>
+        <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a>
+      </div></nav><header class="api-head"><p class="eyebrow">API REST · v1</p>
+      <h1>A mesma frase, em JSON.</h1>
+      <p class="lead">Uma API pública e somente leitura para consultar frases, coleções,
+      perfis e relações de influência. Sem conta e sem chave para começar.</p>
+      <div class="api-actions"><a href="/docs">Abrir Swagger</a>
+        <a href="/openapi.json">Baixar OpenAPI</a><a href="/health/dataset">Estado da base</a>
+      </div></header><section class="api-layout" aria-label="Primeiros passos com a API">
+        <article class="api-panel"><p class="eyebrow">Primeiro pedido</p>
+          <h2>Uma URL previsível.</h2>
+          <p>A frase diária é escolhida sobre a base revisada e preserva a versão do
+          dataset na resposta.</p>
+          <div class="api-code"><span>Terminal</span><pre><code>{curl_example}</code></pre></div>
+          <div class="api-code"><span>Resposta abreviada</span><pre><code>{json_example}</code></pre></div>
+        </article><aside class="api-panel"><p class="eyebrow">Contrato</p>
+          <h2>Pequeno, mas explícito.</h2><ul class="contract-list">
+            <li><strong>Sem autenticação</strong>Uso público com limite informado nos headers.</li>
+            <li><strong>Cache HTTP</strong>ETag e Cache-Control nas respostas estáveis.</li>
+            <li><strong>Erros legíveis</strong>Problem Details em application/problem+json.</li>
+            <li><strong>Proveniência</strong>Fonte e licença acompanham cada frase.</li>
+            <li><strong>Rastreabilidade</strong>Request ID e versão do dataset quando aplicável.</li>
+          </ul></aside></section>
+      <section class="endpoint-section" aria-labelledby="endpoint-title">
+        <p class="eyebrow">Rotas principais</p><h2 id="endpoint-title">O que está disponível.</h2>
+        <ul class="endpoint-list">{endpoint_rows}</ul>
+      </section><footer class="footer"><p>Para experimentar parâmetros e respostas, use o Swagger.</p>
+        <nav class="links" aria-label="Links do rodapé"><a href="/docs">Swagger</a>
+          <a href="/openapi.json">OpenAPI</a><a href="/">Voltar ao gerador</a></nav>
+      </footer></main>"""
+    return HTMLResponse(_document("API · Sisyphus", body))
 
 
 @router.get("/influences", response_class=HTMLResponse, include_in_schema=False)
@@ -496,7 +593,7 @@ async def influences_page(service: Service, thinker: str = "Albert Camus") -> HT
     body = f"""<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
     <main class="shell" id="conteudo"><nav class="topnav" aria-label="Navegação principal">
       <a class="brand" href="/">Sisyphus</a><div class="links"><a href="/">Gerador</a>
-        <a href="/collections">Coleções</a><a href="/docs">API</a>
+        <a href="/collections">Coleções</a><a href="/api">API</a>
         <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a>
       </div></nav><header class="lineage-head"><p class="eyebrow">Linhagem intelectual</p>
       <h1>Nenhuma ideia chega sozinha.</h1>
@@ -512,7 +609,7 @@ async def influences_page(service: Service, thinker: str = "Albert Camus") -> HT
       A ausência de uma conexão não significa ausência de influência histórica.</p>
       <footer class="footer"><p>Um passo leva ao próximo.</p><nav class="links"
         aria-label="Links do rodapé"><a href="/">Voltar ao gerador</a>
-        <a href="/docs">API</a></nav></footer></main>"""
+        <a href="/api">API</a></nav></footer></main>"""
     return HTMLResponse(_document(f"Influências de {thinker} · Sisyphus", body))
 
 
