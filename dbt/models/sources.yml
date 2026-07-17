@@ -66,4 +66,4 @@ seeds:
       - name: quote_id
         tests: [not_null, unique]
       - name: thinker_qid
-        tests: [not_null, unique]
+        tests: [not_null]

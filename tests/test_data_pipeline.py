@@ -57,8 +57,13 @@ def test_pipeline_classifies_editorial_corpus(tmp_path: Path, fixtures_dir: Path
         run_id="fixture-run",
         manifest_sha256="a" * 64,
     )
-    transform(warehouse=warehouse)
-    publish(warehouse=warehouse, serving=serving, expected_thinkers={"Sócrates"})
+    transform(warehouse=warehouse, daily_quotes_per_thinker=1)
+    publish(
+        warehouse=warehouse,
+        serving=serving,
+        expected_thinkers={"Sócrates"},
+        daily_quotes_per_thinker=1,
+    )
     metrics = audit(warehouse=warehouse, report=report)
 
     with duckdb.connect(str(warehouse), read_only=True) as con:
@@ -417,5 +422,17 @@ def test_publication_gates_preserve_current_database(
 
     with pytest.raises(RuntimeError, match=message):
         publish(warehouse=warehouse, serving=serving, expected_thinkers=expected)
+
+    assert serving.read_bytes() == b"current production artifact"
+
+
+def test_publication_blocks_unbalanced_daily_catalog(tmp_path: Path) -> None:
+    warehouse = tmp_path / "warehouse.duckdb"
+    serving = tmp_path / "sisyphus.db"
+    serving.write_bytes(b"current production artifact")
+    _create_publication_warehouse(warehouse, eligible=True)
+
+    with pytest.raises(RuntimeError, match="diferente de 3: Sócrates \\(1\\)"):
+        publish(warehouse=warehouse, serving=serving, expected_thinkers={"Sócrates"})
 
     assert serving.read_bytes() == b"current production artifact"

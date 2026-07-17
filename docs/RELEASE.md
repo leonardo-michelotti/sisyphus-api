@@ -107,7 +107,7 @@ Se o rollback da plataforma não estiver mais disponível:
 
 - testes, dbt ou auditoria falham;
 - SQLite não passa em `pragma integrity_check`;
-- alguma personalidade não possui frase diária aprovada;
+- alguma personalidade não possui exatamente três frases diárias aprovadas;
 - commit, manifesto ou metadados divergem;
 - imagem executa como root;
 - bronze ou DuckDB aparecem no runtime;
