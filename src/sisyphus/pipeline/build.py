@@ -344,6 +344,7 @@ def transform(
     *,
     warehouse: Path = WAREHOUSE,
     daily_quotes_per_thinker: int = DAILY_QUOTES_PER_THINKER,
+    validate_editorial_queue: bool = True,
 ) -> None:
     executable = Path(sys.executable).with_name("dbt.exe" if sys.platform == "win32" else "dbt")
     env = {**os.environ, "SISYPHUS_WAREHOUSE_PATH": str(warehouse.resolve())}
@@ -356,7 +357,12 @@ def transform(
             "--profiles-dir",
             ".",
             "--vars",
-            json.dumps({"daily_quotes_per_thinker": daily_quotes_per_thinker}),
+            json.dumps(
+                {
+                    "daily_quotes_per_thinker": daily_quotes_per_thinker,
+                    "validate_editorial_queue": validate_editorial_queue,
+                }
+            ),
         ],
         cwd=ROOT,
         env=env,

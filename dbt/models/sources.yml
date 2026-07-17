@@ -58,6 +58,18 @@ models:
           - accepted_values:
               arguments:
                 values: [accepted, review, rejected]
+  - name: editorial_review_queue
+    description: Visão legível da fila editorial, sem efeito sobre a API publicada.
+    columns:
+      - name: quote_id
+        tests: [not_null, unique]
+      - name: thinker_qid
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_thinkers')
+                field: thinker_qid
 
 seeds:
   - name: daily_quote_selection
@@ -67,3 +79,25 @@ seeds:
         tests: [not_null, unique]
       - name: thinker_qid
         tests: [not_null]
+  - name: quote_review_queue
+    description: Fila editorial de candidatos ainda não promovidos para a rotação diária.
+    columns:
+      - name: quote_id
+        tests: [not_null, unique]
+      - name: thinker_qid
+        tests: [not_null]
+      - name: review_status
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [pending, approved, rejected]
+      - name: review_reason
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - complete_and_distinct
+                  - long_for_daily
+                  - source_text_needs_revision
