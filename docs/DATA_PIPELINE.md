@@ -72,13 +72,15 @@ para consultas e relatórios compactos.
 | Menos de 40 caracteres | revisão | `short_text` |
 | Mais de 500 caracteres | revisão | `long_text` |
 | Seção de atribuídas | revisão | `attributed_quote` |
+| Texto iniciado por reticências | revisão | `leading_fragment` |
+| Seção identificada como atribuição | revisão | `attribution_section` |
 | Nenhuma ocorrência acima | aceito | `passed_automatic_rules` |
 
 Os limites não afirmam que uma frase curta, longa ou atribuída esteja errada. Eles
 dizem que uma pessoa deve avaliá-la antes que o produto a destaque. Passar pelas
 regras automáticas também não basta: `dbt/seeds/daily_quote_selection.csv` contém
-uma allowlist revisada manualmente, inicialmente com uma frase para cada um dos 18
-pensadores. `is_daily_eligible` só é verdadeiro quando as duas condições passam.
+uma allowlist revisada manualmente, com três frases para cada um dos 18 pensadores.
+`is_daily_eligible` só é verdadeiro quando as duas condições passam.
 
 Essa distinção retirou `Memorabilia IV. 8.8` e trechos narrativos do conjunto
 diário sem apagá-los da camada de origem. Se uma edição da fonte mudar o texto e,
@@ -106,9 +108,10 @@ proveniência inválida ou schema incompatível, a rota responde `503` em
 `application/problem+json`. `/health/dataset` verifica somente esse artefato e pode
 ser usado no contêiner sem depender da disponibilidade momentânea da Wikimedia.
 
-Antes da troca do arquivo, a publicação exige todos os pensadores do catálogo e ao
-menos uma frase elegível para cada um deles. Esses gates cobrem as falhas destrutivas
-para o MVP sem presumir volume ou infraestrutura que o produto ainda não possui.
+Antes da troca do arquivo, a publicação exige todos os pensadores do catálogo e
+exatamente três frases elegíveis para cada um deles. Esses gates cobrem as falhas
+destrutivas para o MVP sem presumir volume ou infraestrutura que o produto ainda
+não possui.
 
 ## Execução
 

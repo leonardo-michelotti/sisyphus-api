@@ -1,35 +1,35 @@
 # Auditoria das coleções editoriais
 
-Dataset `64c1d628a66bfd0a`. Cobertura diária **completa**.
+Dataset `794ad6ac195b3593`. Cobertura diária **completa**.
 
 - 737 registros coletados;
-- 18 frases aprovadas para o modo diário;
+- 54 frases aprovadas para o modo diário;
 - 18 pensadores;
+- 3 a 3 frases por pensador;
 - 0 textos duplicados no recorte diário.
 
 | Coleção | Cobertura | Frases | Fontes | Com obra | Tamanho min./méd./máx. |
 |---|---:|---:|---:|---:|---:|
-| Existência e absurdo | 4/4 | 4 | 4 | 3 | 46/56,5/78 |
-| Ciência e curiosidade | 4/4 | 4 | 4 | 1 | 102/136,2/224 |
-| Liberdade e responsabilidade | 4/4 | 4 | 4 | 2 | 72/102,8/136 |
-| Sociedade e poder | 4/4 | 4 | 4 | 1 | 54/85,5/136 |
-| Conhecimento e dúvida | 4/4 | 4 | 4 | 3 | 68/74,8/80 |
-| Trabalho e vocação | 4/4 | 4 | 4 | 1 | 54/87,2/136 |
-| Revolta e resistência | 4/4 | 4 | 4 | 2 | 47/83,2/136 |
-| Método e descoberta | 4/4 | 4 | 4 | 2 | 68/86/102 |
-| Universo e humanidade | 4/4 | 4 | 4 | 1 | 80/130,8/224 |
-| Indivíduo e liberdade | 4/4 | 4 | 4 | 4 | 46/74,5/125 |
+| Existência e absurdo | 4/4 | 12 | 12 | 9 | 46/91,5/124 |
+| Ciência e curiosidade | 4/4 | 12 | 12 | 3 | 83/121,7/224 |
+| Liberdade e responsabilidade | 4/4 | 12 | 12 | 6 | 62/90,4/136 |
+| Sociedade e poder | 4/4 | 12 | 12 | 5 | 44/114,7/292 |
+| Conhecimento e dúvida | 4/4 | 12 | 12 | 10 | 68/106,2/207 |
+| Trabalho e vocação | 4/4 | 12 | 12 | 3 | 44/104,4/292 |
+| Revolta e resistência | 4/4 | 12 | 12 | 6 | 47/91,9/136 |
+| Método e descoberta | 4/4 | 12 | 12 | 5 | 68/115/207 |
+| Universo e humanidade | 4/4 | 12 | 12 | 5 | 80/118,7/224 |
+| Indivíduo e liberdade | 4/4 | 12 | 12 | 12 | 46/88,9/125 |
 
 ## Leitura
 
-Todas as coleções possuem ao menos uma frase diária para cada pensador e todas as
-18 frases preservam fonte, licença e URL. O campo “Com obra” é informativo: uma
+Todas as coleções possuem três frases diárias para cada pensador e todas as
+54 frases preservam fonte, licença e URL. O campo “Com obra” é informativo: uma
 frase pode ser válida mesmo quando a página do Wikiquote não identifica uma obra.
 
-O recorte diário continua deliberadamente pequeno. Os 737 registros coletados não
-são promovidos em massa; somente 18 passaram pela regra editorial vigente. Antes
-de aumentar esse número, a prioridade é revisar casos individuais e manter a
-proveniência verificável.
+O recorte diário continua deliberadamente curado. Os 737 registros coletados não
+são promovidos em massa. Cada pensador recebeu duas novas frases depois de revisão
+individual, sem perder a proveniência verificável nem o equilíbrio da rotação.
 
 Para reproduzir a tabela:
 

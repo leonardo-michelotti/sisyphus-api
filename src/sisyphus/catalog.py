@@ -86,6 +86,7 @@ COLLECTIONS: dict[str, EditorialCollection] = {item.slug: item for item in _COLL
 ALL_THINKERS: tuple[str, ...] = tuple(
     dict.fromkeys(thinker for item in _COLLECTIONS for thinker in item.pensadores)
 )
+DAILY_QUOTES_PER_THINKER = 3
 
 
 def list_collections() -> list[EditorialCollection]:

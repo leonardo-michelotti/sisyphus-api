@@ -17,7 +17,7 @@ from typing import Any
 import duckdb
 import httpx
 
-from sisyphus.catalog import ALL_THINKERS
+from sisyphus.catalog import ALL_THINKERS, DAILY_QUOTES_PER_THINKER
 from sisyphus.clients.wikiquote import _page_url, parse_quotes
 from sisyphus.config import settings
 from sisyphus.dataset import SERVING_SCHEMA_VERSION
@@ -340,11 +340,24 @@ def _load_bronze(
         con.execute("drop table if exists pipeline_build_metadata")
 
 
-def transform(*, warehouse: Path = WAREHOUSE) -> None:
+def transform(
+    *,
+    warehouse: Path = WAREHOUSE,
+    daily_quotes_per_thinker: int = DAILY_QUOTES_PER_THINKER,
+) -> None:
     executable = Path(sys.executable).with_name("dbt.exe" if sys.platform == "win32" else "dbt")
     env = {**os.environ, "SISYPHUS_WAREHOUSE_PATH": str(warehouse.resolve())}
     subprocess.run(
-        [str(executable), "build", "--project-dir", ".", "--profiles-dir", "."],
+        [
+            str(executable),
+            "build",
+            "--project-dir",
+            ".",
+            "--profiles-dir",
+            ".",
+            "--vars",
+            json.dumps({"daily_quotes_per_thinker": daily_quotes_per_thinker}),
+        ],
         cwd=ROOT,
         env=env,
         check=True,
@@ -374,6 +387,7 @@ def publish(
     warehouse: Path = WAREHOUSE,
     serving: Path = SERVING,
     expected_thinkers: Collection[str] = ALL_THINKERS,
+    daily_quotes_per_thinker: int = DAILY_QUOTES_PER_THINKER,
 ) -> None:
     """Gera e valida um SQLite novo antes de substituir o artefato publicado."""
     serving.parent.mkdir(parents=True, exist_ok=True)
@@ -400,8 +414,11 @@ def publish(
                 eligible_thinkers = {
                     row[0]
                     for row in source.execute(
-                        """select distinct thinker_name from fct_quotes
-                           where is_daily_eligible"""
+                        """select distinct thinkers.thinker_name
+                           from fct_quotes as quotes
+                           join dim_thinkers as thinkers
+                             on thinkers.thinker_qid = quotes.thinker_qid
+                           where quotes.is_daily_eligible"""
                     ).fetchall()
                 }
                 without_daily_quote = set(expected_thinkers) - eligible_thinkers
@@ -409,6 +426,23 @@ def publish(
                     names = ", ".join(sorted(without_daily_quote))
                     raise RuntimeError(
                         f"publicação bloqueada: pensadores sem frase elegível: {names}"
+                    )
+                invalid_daily_counts = source.execute(
+                    """select thinkers.thinker_name, count(*) as quote_count
+                       from fct_quotes as quotes
+                       join dim_thinkers as thinkers
+                         on thinkers.thinker_qid = quotes.thinker_qid
+                       where quotes.is_daily_eligible
+                       group by thinkers.thinker_name
+                       having count(*) != ?
+                       order by thinkers.thinker_name""",
+                    [daily_quotes_per_thinker],
+                ).fetchall()
+                if invalid_daily_counts:
+                    counts = ", ".join(f"{name} ({count})" for name, count in invalid_daily_counts)
+                    raise RuntimeError(
+                        "publicação bloqueada: quantidade de frases elegíveis "
+                        f"diferente de {daily_quotes_per_thinker}: {counts}"
                     )
                 provenance = source.execute(
                     """select run_id, manifest_sha256, pipeline_version,

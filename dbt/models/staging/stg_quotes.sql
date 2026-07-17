@@ -1,11 +1,29 @@
 with source as (
     select * from {{ source('bronze', 'bronze_quotes') }}
 ),
+whitespace_normalized as (
+    select
+        *,
+        regexp_replace(trim(text), '\s+', ' ', 'g') as normalized_text
+    from source
+),
+source_artifacts_removed as (
+    select
+        *,
+        regexp_replace(
+            regexp_replace(
+                regexp_replace(normalized_text, '[ ]*(\[[0-9]+\])+$', ''),
+                '"$', ''
+            ),
+            '"([.!?])$', '\1'
+        ) as quote_text
+    from whitespace_normalized
+),
 normalized as (
     select
         thinker_qid,
         thinker_name,
-        regexp_replace(trim(text), '\\s+', ' ', 'g') as quote_text,
+        quote_text,
         category,
         work,
         source_url,
@@ -13,8 +31,8 @@ normalized as (
         source_license,
         source_revision,
         fetched_at,
-        length(regexp_replace(trim(text), '\\s+', ' ', 'g')) as character_count
-    from source
+        length(quote_text) as character_count
+    from source_artifacts_removed
 ),
 identified as (
     select

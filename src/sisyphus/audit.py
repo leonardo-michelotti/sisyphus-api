@@ -8,7 +8,7 @@ import sqlite3
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .catalog import list_collections
+from .catalog import DAILY_QUOTES_PER_THINKER, list_collections
 from .repositories.quotes import SQLiteQuoteRepository
 
 
@@ -34,11 +34,17 @@ class CollectionAudit:
     frases_elegiveis: int
     pensadores: int
     textos_duplicados: int
+    frases_por_pensador_minimo: int
+    frases_por_pensador_maximo: int
     colecoes: tuple[CollectionCoverage, ...]
 
     @property
     def cobertura_completa(self) -> bool:
-        return all(not item.pensadores_sem_frase for item in self.colecoes)
+        return (
+            all(not item.pensadores_sem_frase for item in self.colecoes)
+            and self.frases_por_pensador_minimo == DAILY_QUOTES_PER_THINKER
+            and self.frases_por_pensador_maximo == DAILY_QUOTES_PER_THINKER
+        )
 
 
 def _normalized(text: str) -> str:
@@ -68,6 +74,11 @@ def audit_collections(path: Path) -> CollectionAudit:
     for row in rows:
         key = _normalized(row["quote_text"])
         repetitions[key] = repetitions.get(key, 0) + 1
+
+    quotes_per_thinker: dict[str, int] = {}
+    for row in rows:
+        name = str(row["thinker_name"])
+        quotes_per_thinker[name] = quotes_per_thinker.get(name, 0) + 1
 
     coverages: list[CollectionCoverage] = []
     for collection in list_collections():
@@ -102,6 +113,8 @@ def audit_collections(path: Path) -> CollectionAudit:
         frases_elegiveis=len(rows),
         pensadores=int(thinker_count),
         textos_duplicados=sum(count - 1 for count in repetitions.values() if count > 1),
+        frases_por_pensador_minimo=min(quotes_per_thinker.values(), default=0),
+        frases_por_pensador_maximo=max(quotes_per_thinker.values(), default=0),
         colecoes=tuple(coverages),
     )
 
@@ -116,6 +129,8 @@ def render_markdown(report: CollectionAudit) -> str:
         f"- {report.total_registros} registros coletados;",
         f"- {report.frases_elegiveis} frases aprovadas para o modo diário;",
         f"- {report.pensadores} pensadores;",
+        f"- {report.frases_por_pensador_minimo} a "
+        f"{report.frases_por_pensador_maximo} frases por pensador;",
         f"- {report.textos_duplicados} textos duplicados no recorte diário.",
         "",
         "| Coleção | Cobertura | Frases | Fontes | Com obra | Tamanho min./méd./máx. |",

@@ -2,7 +2,7 @@ import sqlite3
 from pathlib import Path
 
 from sisyphus.audit import audit_collections, render_markdown
-from sisyphus.catalog import ALL_THINKERS
+from sisyphus.catalog import ALL_THINKERS, DAILY_QUOTES_PER_THINKER
 
 
 def _database(path: Path) -> Path:
@@ -47,9 +47,9 @@ def _database(path: Path) -> Path:
             "insert into quotes values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
-                    f"occ-{index}",
+                    f"occ-{index}-{quote_number}",
                     qid,
-                    f"Frase editorial número {index} para auditoria.",
+                    f"Frase editorial número {index}-{quote_number} para auditoria.",
                     44,
                     "Obra" if index % 2 == 0 else None,
                     "Wikiquote",
@@ -58,6 +58,7 @@ def _database(path: Path) -> Path:
                     1,
                 )
                 for index, (qid, _name) in enumerate(thinkers, start=1)
+                for quote_number in range(1, DAILY_QUOTES_PER_THINKER + 1)
             ],
         )
     return path
@@ -67,7 +68,9 @@ def test_audit_reports_complete_collection_coverage(tmp_path: Path) -> None:
     report = audit_collections(_database(tmp_path / "sisyphus.db"))
 
     assert report.cobertura_completa
-    assert report.frases_elegiveis == len(ALL_THINKERS) == 18
+    assert report.frases_elegiveis == len(ALL_THINKERS) * DAILY_QUOTES_PER_THINKER == 54
+    assert report.frases_por_pensador_minimo == DAILY_QUOTES_PER_THINKER
+    assert report.frases_por_pensador_maximo == DAILY_QUOTES_PER_THINKER
     assert report.textos_duplicados == 0
     assert len(report.colecoes) == 10
     assert all(item.pensadores_cobertos == item.pensadores == 4 for item in report.colecoes)
