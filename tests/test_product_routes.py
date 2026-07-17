@@ -104,6 +104,7 @@ def test_home_explains_product_and_integrations() -> None:
     assert 'id="copy-status" role="status" aria-live="polite"' in response.text
     assert 'aria-label="Navegação principal"' in response.text
     assert 'href="/collections"' in response.text
+    assert 'href="/api"' in response.text
 
 
 def test_collections_page_exposes_editorial_catalog_and_daily_samples() -> None:
@@ -117,6 +118,22 @@ def test_collections_page_exposes_editorial_catalog_and_daily_samples() -> None:
     assert "A liberdade é uma oportunidade de ser melhor." in response.text
     assert "/widget?collection=existencia-e-absurdo&amp;mode=daily" in response.text
     assert "/v1/quote-of-the-day?collection=universo-e-humanidade" in response.text
+
+
+def test_api_page_presents_contract_without_replacing_swagger() -> None:
+    response = client().get("/api")
+
+    assert response.status_code == 200
+    assert "A mesma frase, em JSON" in response.text
+    assert "Sem conta e sem chave para começar" in response.text
+    assert 'href="/api" aria-current="page">API</a>' in response.text
+    assert 'href="/docs">Abrir Swagger</a>' in response.text
+    assert 'href="/openapi.json">Baixar OpenAPI</a>' in response.text
+    assert 'href="/health/dataset">Estado da base</a>' in response.text
+    assert "/v1/quote-of-the-day" in response.text
+    assert "/v1/thinkers/{nome}/influences" in response.text
+    assert "Problem Details" in response.text
+    assert "dataset_version" in response.text
 
 
 def test_quote_of_the_day_exposes_selection_context() -> None:

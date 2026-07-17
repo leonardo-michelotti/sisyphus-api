@@ -10,7 +10,7 @@ Uma frase, sua fonte e uma URL.
 
 [Gerar um widget](https://sisyphus-public-production.up.railway.app/) ·
 [Explorar coleções](https://sisyphus-public-production.up.railway.app/collections) ·
-[Explorar a API](https://sisyphus-public-production.up.railway.app/docs) ·
+[Explorar a API](https://sisyphus-public-production.up.railway.app/api) ·
 [Ver influências](https://sisyphus-public-production.up.railway.app/influences?thinker=Albert%20Camus)
 
 </div>
