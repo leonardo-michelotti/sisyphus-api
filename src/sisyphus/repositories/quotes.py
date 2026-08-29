@@ -14,7 +14,9 @@ from ..dataset import SERVING_SCHEMA_VERSION, DatasetMetadata
 from ..errors import DatasetUnavailable, InvalidSelection, NoQuotesAvailable, ThinkerNotFound
 from ..schemas import (
     Attribution,
+    CuratedQuotePage,
     CuratedQuoteSelection,
+    ListMeta,
     Quote,
     QuoteCategory,
     SelectionMode,
@@ -33,9 +35,45 @@ class DailyQuoteRepository(Protocol):
         on_date: date | None = None,
     ) -> CuratedQuoteSelection: ...
 
+    def list_curated(
+        self,
+        *,
+        thinker: str | None = None,
+        collection_slug: str | None = None,
+        category: QuoteCategory | None = None,
+        query: str | None = None,
+        limit: int = 12,
+        offset: int = 0,
+    ) -> CuratedQuotePage: ...
+
 
 def _seed(value: str) -> int:
     return int.from_bytes(hashlib.sha256(value.encode()).digest()[:8], byteorder="big")
+
+
+def _quote_from_row(row: sqlite3.Row) -> Quote:
+    return Quote(
+        texto=row["quote_text"],
+        autor=row["thinker_name"],
+        categoria=QuoteCategory(row["category"]),
+        obra=row["work"],
+        original=row["original_text"],
+        idioma_original=row["original_language"],
+        traducao=(
+            TranslationCredit(
+                responsavel=row["translator_name"],
+                licenca=row["translation_license"],
+                url=row["translation_url"],
+            )
+            if row["translator_name"]
+            else None
+        ),
+        fonte=Attribution(
+            fonte=row["source_name"],
+            licenca=row["source_license"],
+            url=row["source_url"],
+        ),
+    )
 
 
 class SQLiteQuoteRepository:
@@ -163,31 +201,78 @@ class SQLiteQuoteRepository:
         )
         row = rows[_seed(key) % len(rows)]
         return CuratedQuoteSelection(
-            frase=Quote(
-                texto=row["quote_text"],
-                autor=row["thinker_name"],
-                categoria=QuoteCategory(row["category"]),
-                obra=row["work"],
-                original=row["original_text"],
-                idioma_original=row["original_language"],
-                traducao=(
-                    TranslationCredit(
-                        responsavel=row["translator_name"],
-                        licenca=row["translation_license"],
-                        url=row["translation_url"],
-                    )
-                    if row["translator_name"]
-                    else None
-                ),
-                fonte=Attribution(
-                    fonte=row["source_name"],
-                    licenca=row["source_license"],
-                    url=row["source_url"],
-                ),
-            ),
+            frase=_quote_from_row(row),
             modo=SelectionMode.daily,
             data=selected_date.isoformat(),
             colecao=collection,
+            dataset_version=metadata.dataset_version,
+            dataset_schema=metadata.schema_version,
+        )
+
+    def list_curated(
+        self,
+        *,
+        thinker: str | None = None,
+        collection_slug: str | None = None,
+        category: QuoteCategory | None = None,
+        query: str | None = None,
+        limit: int = 12,
+        offset: int = 0,
+    ) -> CuratedQuotePage:
+        collection = get_collection(collection_slug) if collection_slug else None
+        if thinker and thinker not in ALL_THINKERS:
+            raise ThinkerNotFound(f"Pensador {thinker!r} não pertence ao catálogo diário")
+        if thinker and collection and thinker not in collection.pensadores:
+            raise InvalidSelection(f"{thinker!r} não pertence à coleção {collection.titulo!r}")
+        candidates: Collection[str] = (
+            [thinker] if thinker else collection.pensadores if collection else ALL_THINKERS
+        )
+        metadata = self.metadata()
+
+        placeholders = ", ".join("?" for _ in candidates)
+        clauses = ["q.is_daily_eligible = 1", f"t.thinker_name in ({placeholders})"]
+        parameters: list[object] = list(candidates)
+        if category is not None:
+            clauses.append("q.category = ?")
+            parameters.append(category.value)
+
+        sql = f"""select q.quote_text, q.original_text, q.original_language,
+                         t.thinker_name, q.category, q.work, q.source_name,
+                         q.source_license, q.source_url, q.translator_name,
+                         q.translation_license, q.translation_url
+                  from quotes q
+                  join thinkers t on t.thinker_qid = q.thinker_qid
+                  where {" and ".join(clauses)}
+                  order by t.thinker_name, q.occurrence_id"""
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(sql, parameters).fetchall()
+        except sqlite3.Error as exc:
+            raise DatasetUnavailable("Schema da base curada é incompatível") from exc
+
+        search = query.strip().casefold() if query else ""
+        if search:
+            rows = [
+                row
+                for row in rows
+                if search
+                in " ".join(
+                    value
+                    for value in (row["quote_text"], row["thinker_name"], row["work"])
+                    if value
+                ).casefold()
+            ]
+        total = len(rows)
+        page_rows = rows[offset : offset + limit]
+        return CuratedQuotePage(
+            data=[_quote_from_row(row) for row in page_rows],
+            meta=ListMeta(
+                count=len(page_rows),
+                limit=limit,
+                offset=offset,
+                total=total,
+                has_more=offset + limit < total,
+            ),
             dataset_version=metadata.dataset_version,
             dataset_schema=metadata.schema_version,
         )

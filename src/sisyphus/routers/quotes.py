@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query, Response
 from ..catalog import get_collection, list_collections
 from ..deps import DailyQuotes, Service
 from ..schemas import (
+    CuratedQuotePage,
     CuratedQuoteSelection,
     EditorialCollection,
     ListMeta,
@@ -34,6 +35,26 @@ async def collections() -> Page[EditorialCollection]:
 @router.get("/collections/{slug}", summary="Detalha uma coleção editorial")
 async def collection(slug: str) -> EditorialCollection:
     return get_collection(slug)
+
+
+@router.get("/quotes", summary="Navega pelas frases do catálogo curado")
+def curated_quotes(
+    repository: DailyQuotes,
+    thinker: Annotated[str | None, Query(description="Nome de uma personalidade")] = None,
+    collection: Annotated[str | None, Query(description="Slug de uma coleção")] = None,
+    category: QuoteCategory | None = None,
+    q: Annotated[str | None, Query(max_length=100, description="Trecho da frase")] = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 12,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> CuratedQuotePage:
+    return repository.list_curated(
+        thinker=thinker,
+        collection_slug=collection,
+        category=category,
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
 
 
 async def _selection(

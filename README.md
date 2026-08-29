@@ -9,6 +9,7 @@ Uma frase, sua fonte e uma URL.
 [![License MIT](https://img.shields.io/badge/License-MIT-D4A85A)](LICENSE)
 
 [Gerar um widget](https://sisyphus-public-production.up.railway.app/) ·
+[Navegar pelas frases](https://sisyphus-public-production.up.railway.app/quotes) ·
 [Explorar coleções](https://sisyphus-public-production.up.railway.app/collections) ·
 [Explorar a API](https://sisyphus-public-production.up.railway.app/api) ·
 [Ver influências](https://sisyphus-public-production.up.railway.app/influences?thinker=Albert%20Camus)
@@ -170,6 +171,7 @@ limites de requisição quando aplicável. A seleção aleatória usa
 | Método | Rota | Retorna |
 |---|---|---|
 | `GET` | `/v1/quote-of-the-day` | Frase diária curada e determinística |
+| `GET` | `/v1/quotes` | Frases curadas com filtros e paginação |
 | `GET` | `/v1/quotes/random` | Frase aleatória com filtros |
 | `GET` | `/v1/collections` | Coleções editoriais |
 | `GET` | `/v1/search?q=` | Busca de personalidades |
