@@ -155,6 +155,13 @@ class Page(BaseModel, Generic[T]):
     meta: ListMeta
 
 
+class CuratedQuotePage(Page[Quote]):
+    """Página de frases do catálogo curado, vinculada à versão do dataset."""
+
+    dataset_version: str
+    dataset_schema: int
+
+
 class ProblemDetail(BaseModel):
     """Corpo de erro problem+json — RFC 9457 (ADR-007)."""
 

@@ -181,6 +181,28 @@ def test_daily_selection_exposes_original_and_translation_credit(tmp_path: Path)
     assert result.frase.traducao.responsavel == "Projeto Sisyphus"
 
 
+def test_curated_listing_excludes_ineligible_quotes_and_paginates(tmp_path: Path) -> None:
+    repository = SQLiteQuoteRepository(_database(tmp_path / "sisyphus.db"))
+
+    first = repository.list_curated(limit=1)
+    second = repository.list_curated(limit=1, offset=1)
+
+    assert first.meta.total == 2
+    assert first.meta.has_more is True
+    assert first.data[0] != second.data[0]
+    assert {first.data[0].autor, second.data[0].autor} == {"Albert Camus"}
+    assert first.dataset_schema == 3
+
+
+def test_curated_listing_searches_text_with_casefold(tmp_path: Path) -> None:
+    repository = SQLiteQuoteRepository(_database(tmp_path / "sisyphus.db"))
+
+    result = repository.list_curated(query="CRIAR")
+
+    assert result.meta.total == 1
+    assert result.data[0].obra == "O Mito de Sísifo"
+
+
 def test_ineligible_quote_never_participates(tmp_path: Path) -> None:
     repository = SQLiteQuoteRepository(_database(tmp_path / "sisyphus.db"))
 

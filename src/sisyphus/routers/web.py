@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse
 from ..catalog import ALL_THINKERS, list_collections
 from ..deps import DailyQuotes, Service
 from ..errors import SisyphusError
-from ..schemas import QuoteSelection, SelectionMode
+from ..schemas import QuoteCategory, QuoteSelection, SelectionMode
 from ..services.quote_selection import select_quote
 
 router = APIRouter(tags=["site e widget"])
@@ -247,6 +247,31 @@ button:hover { background: var(--accent-soft); }
 .collection-sample cite { display: block; margin-top: 13px; color: var(--accent); font-size: 12px; font-style: normal; }
 .collection-actions { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 26px; font-size: 13px; }
 .collection-actions a { color: var(--accent); text-underline-offset: 4px; }
+.quote-browser-head { max-width: 850px; padding: 34px 0 42px; }
+.quote-browser-head h1 { max-width: 800px; }
+.quote-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 20px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel-soft);
+}
+.quote-filters .field, .quote-filters select, .quote-filters input { min-width: 0; width: 100%; }
+.filter-actions { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+.filter-actions a { color: var(--muted); font-size: 13px; text-underline-offset: 4px; }
+.quote-results { display: flex; justify-content: space-between; gap: 18px; margin: 28px 0 18px; color: var(--muted); font-size: 13px; }
+.quote-results strong { color: var(--ink); font-weight: 500; }
+.quote-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding-bottom: 30px; }
+.quote-card { display: grid; align-content: space-between; min-height: 310px; border: 1px solid var(--line); background: var(--panel); padding: 26px; }
+.quote-card blockquote { margin: 0; font: 500 24px/1.4 Georgia, serif; }
+.quote-card footer { margin-top: 34px; padding-top: 20px; border-top: 1px solid var(--line); }
+.quote-author { margin: 0 0 7px; color: var(--accent); font-size: 14px; font-weight: 650; }
+.quote-meta, .quote-original, .quote-translation { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.quote-source { display: inline-block; margin-top: 15px; color: var(--muted); font-size: 11px; text-underline-offset: 4px; }
+.pagination { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 22px 0 72px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.pagination a { color: var(--accent); text-underline-offset: 4px; }
 .api-head { max-width: 820px; padding: 34px 0 62px; }
 .api-head h1 { max-width: 790px; }
 .api-actions { display: flex; gap: 12px 22px; flex-wrap: wrap; margin-top: 28px; }
@@ -269,6 +294,10 @@ button:hover { background: var(--accent-soft); }
 .endpoint-method { color: var(--accent); font: 12px ui-monospace, monospace; }
 .endpoint-path { color: var(--ink); font: 13px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
 .endpoint-description { color: var(--muted); font-size: 14px; line-height: 1.55; }
+@media (max-width: 960px) {
+  .quote-filters { grid-template-columns: 1fr 1fr; }
+  .filter-actions { justify-content: flex-end; }
+}
 @media (max-width: 820px) {
   .hero { grid-template-columns: 1fr; }
   .still-life { justify-self: start; width: 280px; height: 190px; }
@@ -281,6 +310,8 @@ button:hover { background: var(--accent-soft); }
   .lineage { grid-template-columns: 1fr; align-items: start; }
   .relation { grid-template-columns: 70px 1fr; align-items: center; text-align: left; }
   .collection-grid { grid-template-columns: 1fr; }
+  .quote-filters { grid-template-columns: 1fr 1fr; }
+  .quote-grid { grid-template-columns: 1fr; }
   .api-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
@@ -304,6 +335,8 @@ button:hover { background: var(--accent-soft); }
   .lineage-form label { grid-column: auto; }
   .lineage-form button { width: 100%; }
   .influence-list { grid-template-columns: 1fr; }
+  .quote-filters { grid-template-columns: 1fr; }
+  .filter-actions { justify-content: space-between; }
   .endpoint-row { grid-template-columns: 48px 1fr; gap: 10px; }
   .endpoint-description { grid-column: 2; }
 }
@@ -337,7 +370,8 @@ async def home() -> HTMLResponse:
     <main class="shell" id="conteudo">
       <nav class="topnav" aria-label="Navegação principal">
         <a class="brand" href="/">Sisyphus</a>
-        <div class="links"><a href="#gerador">Gerador</a><a href="/collections">Coleções</a>
+        <div class="links"><a href="#gerador">Gerador</a><a href="/quotes">Frases</a>
+          <a href="/collections">Coleções</a>
           <a href="#usar">Como usar</a>
           <a href="/api">API</a><a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a></div>
       </nav>
@@ -400,7 +434,7 @@ async def home() -> HTMLResponse:
         </div>
       </section>
       <footer class="footer"><p>Só isso: uma frase, sua fonte e uma URL.</p>
-        <nav class="links" aria-label="Links do rodapé"><a href="/api">API</a>
+        <nav class="links" aria-label="Links do rodapé"><a href="/quotes">Frases</a><a href="/api">API</a>
           <a href="/collections">Coleções</a>
           <a href="/influences">Influências</a>
           <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a></nav>
@@ -460,6 +494,7 @@ async def collections_page(repository: DailyQuotes) -> HTMLResponse:
     body = f"""<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
     <main class="shell" id="conteudo"><nav class="topnav" aria-label="Navegação principal">
       <a class="brand" href="/">Sisyphus</a><div class="links"><a href="/">Gerador</a>
+        <a href="/quotes">Frases</a>
         <a href="/influences">Influências</a><a href="/api">API</a>
         <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a>
       </div></nav><header class="collection-head"><p class="eyebrow">Coleções editoriais</p>
@@ -471,9 +506,139 @@ async def collections_page(repository: DailyQuotes) -> HTMLResponse:
       <section class="collection-grid" aria-label="Coleções disponíveis">{"".join(cards)}</section>
       <footer class="footer"><p>Escolha um recorte e deixe a frase por perto.</p>
         <nav class="links" aria-label="Links do rodapé"><a href="/">Voltar ao gerador</a>
+          <a href="/quotes">Frases</a>
           <a href="/influences">Influências</a><a href="/api">API</a></nav>
       </footer></main>"""
     return HTMLResponse(_document("Coleções · Sisyphus", body))
+
+
+@router.get("/quotes", response_class=HTMLResponse, include_in_schema=False)
+async def quotes_page(
+    repository: DailyQuotes,
+    collection: str | None = None,
+    thinker: str | None = None,
+    category: Annotated[str | None, Query(pattern="^(verificada|obra|atribuida)?$")] = None,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+) -> HTMLResponse:
+    """Navegação humana pelo recorte revisado do SQLite publicado."""
+    limit = 12
+    selected_category = QuoteCategory(category) if category else None
+    result = repository.list_curated(
+        thinker=thinker,
+        collection_slug=collection,
+        category=selected_category,
+        query=q,
+        limit=limit,
+        offset=(page - 1) * limit,
+    )
+    collection_options = "<option value=''>Todas as vozes</option>" + "".join(
+        f"<option value='{item.slug}'{' selected' if item.slug == collection else ''}>"
+        f"{html.escape(item.titulo)}</option>"
+        for item in list_collections()
+    )
+    thinker_options = "<option value=''>Todos os pensadores</option>" + "".join(
+        f"<option value='{html.escape(name)}'{' selected' if name == thinker else ''}>"
+        f"{html.escape(name)}</option>"
+        for name in ALL_THINKERS
+    )
+    category_labels = {
+        QuoteCategory.verificada: "Verificada",
+        QuoteCategory.obra: "Obra identificada",
+        QuoteCategory.atribuida: "Atribuída",
+    }
+    category_options = "<option value=''>Todas as categorias</option>" + "".join(
+        f"<option value='{item.value}'"
+        f"{' selected' if item == selected_category else ''}>{label}</option>"
+        for item, label in category_labels.items()
+    )
+    cards: list[str] = []
+    for quote in result.data:
+        details = [category_labels[quote.categoria]]
+        if quote.obra:
+            details.append(quote.obra)
+        original = (
+            f"<p class='quote-original'>Original: {html.escape(quote.original)}</p>"
+            if quote.original
+            else ""
+        )
+        translation = (
+            f"<p class='quote-translation'>Tradução: {html.escape(quote.traducao.responsavel)}</p>"
+            if quote.traducao
+            else ""
+        )
+        source = quote.fonte
+        source_label = f"{source.fonte} · {source.licenca}"
+        source_html = (
+            f"<a class='quote-source' href='{html.escape(source.url)}' target='_blank' "
+            f"rel='noopener noreferrer'>{html.escape(source_label)}</a>"
+            if source.url
+            else f"<span class='quote-source'>{html.escape(source_label)}</span>"
+        )
+        cards.append(
+            f"""<article class="quote-card"><blockquote>“{html.escape(quote.texto)}”</blockquote>
+            <footer><p class="quote-author">{html.escape(quote.autor)}</p>
+              <p class="quote-meta">{html.escape(" · ".join(details))}</p>
+              {original}{translation}{source_html}</footer></article>"""
+        )
+    total = result.meta.total or 0
+    cards_html = (
+        "".join(cards)
+        if cards
+        else "<p class='empty'>Nenhuma frase corresponde aos filtros informados.</p>"
+    )
+    params: dict[str, str] = {}
+    if collection:
+        params["collection"] = collection
+    if thinker:
+        params["thinker"] = thinker
+    if selected_category:
+        params["category"] = selected_category.value
+    if q:
+        params["q"] = q
+
+    def page_url(target: int) -> str:
+        return f"/quotes?{urlencode({**params, 'page': target})}"
+
+    previous = (
+        f"<a href='{html.escape(page_url(page - 1))}'>Página anterior</a>"
+        if page > 1
+        else "<span></span>"
+    )
+    following = (
+        f"<a href='{html.escape(page_url(page + 1))}'>Próxima página</a>"
+        if result.meta.has_more
+        else "<span></span>"
+    )
+    body = f"""<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+    <main class="shell" id="conteudo"><nav class="topnav" aria-label="Navegação principal">
+      <a class="brand" href="/">Sisyphus</a><div class="links"><a href="/">Gerador</a>
+        <a href="/quotes" aria-current="page">Frases</a><a href="/collections">Coleções</a>
+        <a href="/influences">Influências</a><a href="/api">API</a>
+      </div></nav><header class="quote-browser-head"><p class="eyebrow">Catálogo curado</p>
+      <h1>Frases para percorrer.</h1>
+      <p class="lead">Navegue pelo recorte revisado do Sisyphus. Cada frase preserva
+      autoria, contexto e a fonte de onde veio.</p></header>
+      <form class="quote-filters" method="get" action="/quotes">
+        <label class="field" for="q">Buscar na frase<input id="q" name="q"
+          value="{html.escape(q or "")}" placeholder="Ex.: liberdade"></label>
+        <label class="field" for="collection">Vozes da coleção<select id="collection"
+          name="collection">{collection_options}</select></label>
+        <label class="field" for="thinker">Pensador<select id="thinker"
+          name="thinker">{thinker_options}</select></label>
+        <label class="field" for="category">Categoria<select id="category"
+          name="category">{category_options}</select></label>
+        <div class="filter-actions"><button type="submit">Filtrar</button>
+          <a href="/quotes">Limpar</a></div>
+      </form><div class="quote-results"><span><strong>{total}</strong> frases encontradas</span>
+        <span>Base {html.escape(result.dataset_version)}</span></div>
+      <section class="quote-grid" aria-label="Frases curadas">{cards_html}</section>
+      <nav class="pagination" aria-label="Paginação">{previous}<span>Página {page}</span>{following}</nav>
+      <footer class="footer"><p>Uma coletânea pequena, revisada e rastreável.</p>
+        <nav class="links" aria-label="Links do rodapé"><a href="/collections">Coleções</a>
+          <a href="/api">API</a><a href="/">Voltar ao gerador</a></nav>
+      </footer></main>"""
+    return HTMLResponse(_document("Frases · Sisyphus", body))
 
 
 @router.get("/api", response_class=HTMLResponse, include_in_schema=False)
@@ -481,6 +646,7 @@ async def api_page() -> HTMLResponse:
     """Entrada editorial para o contrato REST; o Swagger permanece em /docs."""
     endpoints = (
         ("/v1/quote-of-the-day", "Frase diária curada e estável durante a data."),
+        ("/v1/quotes", "Navegação paginada pelo catálogo curado."),
         ("/v1/quotes/random", "Seleção ao vivo com filtros por pessoa, coleção e tamanho."),
         ("/v1/collections", "Catálogo dos dez recortes editoriais."),
         ("/v1/search?q=", "Busca de personalidades por nome."),
@@ -513,6 +679,7 @@ async def api_page() -> HTMLResponse:
     body = f"""<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
     <main class="shell" id="conteudo"><nav class="topnav" aria-label="Navegação principal">
       <a class="brand" href="/">Sisyphus</a><div class="links"><a href="/">Gerador</a>
+        <a href="/quotes">Frases</a>
         <a href="/collections">Coleções</a><a href="/influences">Influências</a>
         <a href="/api" aria-current="page">API</a>
         <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a>
@@ -593,6 +760,7 @@ async def influences_page(service: Service, thinker: str = "Albert Camus") -> HT
     body = f"""<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
     <main class="shell" id="conteudo"><nav class="topnav" aria-label="Navegação principal">
       <a class="brand" href="/">Sisyphus</a><div class="links"><a href="/">Gerador</a>
+        <a href="/quotes">Frases</a>
         <a href="/collections">Coleções</a><a href="/api">API</a>
         <a href="https://github.com/leonardo-michelotti/sisyphus-api">GitHub</a>
       </div></nav><header class="lineage-head"><p class="eyebrow">Linhagem intelectual</p>
@@ -609,6 +777,7 @@ async def influences_page(service: Service, thinker: str = "Albert Camus") -> HT
       A ausência de uma conexão não significa ausência de influência histórica.</p>
       <footer class="footer"><p>Um passo leva ao próximo.</p><nav class="links"
         aria-label="Links do rodapé"><a href="/">Voltar ao gerador</a>
+        <a href="/quotes">Frases</a>
         <a href="/api">API</a></nav></footer></main>"""
     return HTMLResponse(_document(f"Influências de {thinker} · Sisyphus", body))
 

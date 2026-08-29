@@ -12,9 +12,11 @@ from sisyphus.repositories.quotes import DailyQuoteRepository, SQLiteQuoteReposi
 from sisyphus.routers import quotes, web
 from sisyphus.schemas import (
     Attribution,
+    CuratedQuotePage,
     CuratedQuoteSelection,
     InfluenceGraph,
     InfluenceNode,
+    ListMeta,
     Quote,
     QuoteCategory,
     SelectionMode,
@@ -66,6 +68,26 @@ class FakeDailyRepository:
             dataset_schema=2,
         )
 
+    def list_curated(self, **_filters: object) -> CuratedQuotePage:
+        return CuratedQuotePage(
+            data=[
+                Quote(
+                    texto="A liberdade é uma oportunidade de ser melhor.",
+                    autor="Albert Camus",
+                    categoria=QuoteCategory.verificada,
+                    obra="Cadernos",
+                    fonte=Attribution(
+                        fonte="Wikiquote",
+                        licenca="CC BY-SA 4.0",
+                        url="https://example.com/quote",
+                    ),
+                )
+            ],
+            meta=ListMeta(count=1, limit=12, total=1, has_more=False),
+            dataset_version="0123456789abcdef",
+            dataset_schema=2,
+        )
+
 
 def client() -> TestClient:
     app = FastAPI()
@@ -86,6 +108,15 @@ def test_lists_ten_editorial_collections() -> None:
 
     assert response.status_code == 200
     assert response.json()["meta"]["total"] == 10
+
+
+def test_lists_curated_quotes_with_dataset_identity() -> None:
+    response = client().get("/v1/quotes", params={"q": "liberdade"})
+
+    assert response.status_code == 200
+    assert response.json()["data"][0]["autor"] == "Albert Camus"
+    assert response.json()["meta"]["total"] == 1
+    assert response.json()["dataset_version"] == "0123456789abcdef"
 
 
 def test_home_explains_product_and_integrations() -> None:
@@ -118,6 +149,29 @@ def test_collections_page_exposes_editorial_catalog_and_daily_samples() -> None:
     assert "A liberdade é uma oportunidade de ser melhor." in response.text
     assert "/widget?collection=existencia-e-absurdo&amp;mode=daily" in response.text
     assert "/v1/quote-of-the-day?collection=universo-e-humanidade" in response.text
+
+
+def test_quotes_page_exposes_curated_catalog_and_filters() -> None:
+    response = client().get("/quotes")
+
+    assert response.status_code == 200
+    assert "Frases para percorrer" in response.text
+    assert "A liberdade é uma oportunidade de ser melhor." in response.text
+    assert 'class="quote-card"' in response.text
+    assert 'name="collection"' in response.text
+    assert 'name="thinker"' in response.text
+    assert 'name="category"' in response.text
+    assert 'href="/quotes" aria-current="page"' in response.text
+
+
+def test_quotes_page_accepts_empty_html_form_filters() -> None:
+    response = client().get(
+        "/quotes",
+        params={"q": "liberdade", "collection": "", "thinker": "", "category": ""},
+    )
+
+    assert response.status_code == 200
+    assert "A liberdade é uma oportunidade de ser melhor." in response.text
 
 
 def test_api_page_presents_contract_without_replacing_swagger() -> None:
